@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>英语翻译与语法分析</title>
+</head>
+<body>
+  <h1>英语翻译与语法分析</h1>
+
+  <section>
+    <label for="input-text">输入英文单词或句子</label>
+    <textarea id="input-text" rows="3" placeholder="例如：unbelievable / The old man the ship"></textarea>
+
+    <div>
+      <label>
+        模式：
+        <select id="mode">
+          <option value="auto">自动</option>
+          <option value="word">单词</option>
+          <option value="sentence">句子</option>
+        </select>
+      </label>
+
+      <button id="submit-btn">翻译</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>结果</h2>
+    <div id="status"></div>
+    <div id="output"></div>
+  </section>
+
+  <script src="./app.js"></script>
+</body>
+</html>
