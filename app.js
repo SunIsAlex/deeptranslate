@@ -39,6 +39,8 @@ async function handleSubmit() {
     }
     setStatus(data._cached ? "缓存" : "");
     render(data);
+    // 提交时更新地址栏（不刷页面）
+    history.pushState(null, "", `?text=${encodeURIComponent(text)}&mode=${modeEl.value}`);
   } catch (err) {
     setStatus(`网络错误：${err.message}`);
   } finally {
@@ -149,3 +151,14 @@ function section(title, items) {
   sec.appendChild(ul);
   return sec;
 }
+
+// 页面加载时读取 URL 参数
+(function restoreFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const text = params.get("text");
+  const mode = params.get("mode");
+  if (!text) return;
+  inputEl.value = text;
+  if (mode) modeEl.value = mode;
+  handleSubmit();
+})();
