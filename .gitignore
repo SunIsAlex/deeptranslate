@@ -2,4 +2,5 @@
 .env
 .edgeone/*
 .tef_dist/*
-  
+node_modules/*
+*.json
