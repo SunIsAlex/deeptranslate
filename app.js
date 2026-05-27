@@ -7,6 +7,29 @@ const statusEl = document.getElementById("status");
 const outputEl = document.getElementById("output");
 const copyBtn = document.getElementById("copy-btn");
 
+// 加在 app.js 顶部工具区
+function detectType(text) {
+  const trimmed = text.replace(/[.,!?;:'"()]/g, "").trim();
+  if (!trimmed) return "auto";
+  return /^[a-zA-Z-]+$/.test(trimmed) ? "word" : "sentence";
+}
+
+// 加在事件绑定区
+inputEl.addEventListener("input", () => {
+  if (modeEl.value === "auto" || modeEl.dataset.autoSet === "1") {
+    const detected = detectType(inputEl.value);
+    if (detected !== "auto") {
+      modeEl.value = detected;
+      modeEl.dataset.autoSet = "1"; // 标记是自动设置的
+    }
+  }
+});
+
+// 用户手动改 mode 时，清除自动标记，尊重用户选择
+modeEl.addEventListener("change", () => {
+  delete modeEl.dataset.autoSet;
+});
+
 submitBtn.addEventListener("click", handleSubmit);
 
 inputEl.addEventListener("keydown", (e) => {
@@ -255,3 +278,4 @@ copyBtn.addEventListener("click", async () => {
     setStatus("复制失败");
   }
 });
+
