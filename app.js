@@ -93,10 +93,6 @@ function renderWord(data) {
     })));
   }
 
-  if (analysis?.etymology) {
-    frag.appendChild(section("词源", [textLi(analysis.etymology)]));
-  }
-
   if (analysis?.examples?.length) {
     frag.appendChild(section("例句", analysis.examples.map(textLi)));
   }

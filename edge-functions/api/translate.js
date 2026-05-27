@@ -153,7 +153,9 @@ async function writeCache(key, value) {
 function resolveType(text, mode) {
   if (mode === "word" || mode === "sentence") return mode;
   const trimmed = text.replace(/[.,!?;:'"()]/g, "").trim();
-  return !/\s/.test(trimmed) && trimmed.length <= 30 ? "word" : "sentence";
+  // 无空格 + 只有字母和连字符 → 单词
+  if (/^[a-zA-Z-]+$/.test(trimmed)) return "word";
+  return "sentence";
 }
 
 function wordPrompt(word) {
@@ -166,7 +168,6 @@ function wordPrompt(word) {
     "morphology": [
       { "part": "构词成分", "kind": "prefix|root|suffix|combining_form", "meaning": "该成分的含义" }
     ],
-    "etymology": "一句话词源",
     "examples": ["英文例句1 — 中文翻译", "英文例句2 — 中文翻译"]
   }
 }
@@ -174,7 +175,6 @@ function wordPrompt(word) {
 - morphology 必须按单词中出现的顺序列出
 - 当词根接后缀时如有拼写变化（如去 e、双写、变 y 为 i），part 必须反映实际拼写形式，不是原形。例如 unbelievable 拆为 un- / believ / -able
 - combining_form 用于希腊/拉丁源的实义构词成分（如 arthro-, -pod, bio-, -logy）
-- etymology 只给确定的来源，不确定时简短描述构词关系即可，不要编造历史细节
 - 中文字符之间不要插入空格
 - 如果是单纯词无可拆分成分，morphology 返回空数组`;
 }
