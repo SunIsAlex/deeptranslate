@@ -3,4 +3,5 @@
 .edgeone/*
 .tef_dist/*
 node_modules/*
-*.json
+package.json
+package-lock.json

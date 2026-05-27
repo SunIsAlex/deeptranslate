@@ -235,6 +235,18 @@
     textarea, .output-placeholder { font-size: 18px; }
     main { padding: 12px; }
   }
+  .icon-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: auto;
+}
+.icon-btn:hover { background: var(--bg-soft); }
+.icon-btn.copied { color: var(--blue); }
 </style>
 </head>
 <body>
@@ -258,6 +270,7 @@
         <div class="panel-header">
           <span class="panel-label">中文</span>
           <span class="status" id="status"></span>
+          <button id="copy-btn" class="icon-btn" title="复制链接" hidden>🔗</button>
         </div>
         <div class="output" id="output">
           <div class="output-placeholder">翻译结果</div>
@@ -267,6 +280,7 @@
     <div class="actions">
       <button id="submit-btn">翻译</button>
     </div>
+    
   </main>
   <script src="./app.js"></script>
 </body>

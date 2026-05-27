@@ -5,6 +5,7 @@ const modeEl = document.getElementById("mode");
 const submitBtn = document.getElementById("submit-btn");
 const statusEl = document.getElementById("status");
 const outputEl = document.getElementById("output");
+const copyBtn = document.getElementById("copy-btn");
 
 submitBtn.addEventListener("click", handleSubmit);
 
@@ -38,9 +39,11 @@ async function handleSubmit() {
       return;
     }
     setStatus(data._cached ? "缓存" : "");
-    render(data);
+copyBtn.hidden = false;
+render(data);
     // 提交时更新地址栏（不刷页面）
-    history.pushState(null, "", `?text=${encodeURIComponent(text)}&mode=${modeEl.value}`);
+    history.pushState(null, "", `/${encodeURIComponent(text)}`);
+
   } catch (err) {
     setStatus(`网络错误：${err.message}`);
   } finally {
@@ -156,11 +159,13 @@ function section(title, items) {
 }
 
 // 页面加载时读取 URL 参数
+// 页面加载时（替换原来的 restoreFromUrl）
 (function restoreFromUrl() {
+  const p = location.pathname.slice(1); // 去掉开头的 /
+  if (!p) return;
+  const text = decodeURIComponent(p);
   const params = new URLSearchParams(location.search);
-  const text = params.get("text");
-  const mode = params.get("mode");
-  if (!text) return;
+  const mode = params.get("mode") || "auto";
   inputEl.value = text;
   if (mode) modeEl.value = mode;
   handleSubmit();
@@ -236,3 +241,17 @@ function renderHighlightedSentence(input, components) {
 
   return wrap;
 }
+
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    copyBtn.textContent = "✓";
+    copyBtn.classList.add("copied");
+    setTimeout(() => {
+      copyBtn.textContent = "🔗";
+      copyBtn.classList.remove("copied");
+    }, 1500);
+  } catch {
+    setStatus("复制失败");
+  }
+});
