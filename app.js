@@ -42,8 +42,9 @@ async function handleSubmit() {
 copyBtn.hidden = false;
 render(data);
     // 提交时更新地址栏（不刷页面）
-    history.pushState(null, "", `/${encodeURIComponent(text)}`);
-
+    // handleSubmit 里成功拿到 data 之后
+const prefix = data.type === "word" ? "w" : "s";
+history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
   } catch (err) {
     setStatus(`网络错误：${err.message}`);
   } finally {
@@ -161,13 +162,12 @@ function section(title, items) {
 // 页面加载时读取 URL 参数
 // 页面加载时（替换原来的 restoreFromUrl）
 (function restoreFromUrl() {
-  const p = location.pathname.slice(1); // 去掉开头的 /
-  if (!p) return;
-  const text = decodeURIComponent(p);
-  const params = new URLSearchParams(location.search);
-  const mode = params.get("mode") || "auto";
+  const m = location.pathname.match(/^\/(w|s)\/(.+)$/);
+  if (!m) return;
+  const [, prefix, encoded] = m;
+  const text = decodeURIComponent(encoded);
   inputEl.value = text;
-  if (mode) modeEl.value = mode;
+  modeEl.value = prefix === "w" ? "word" : "sentence";
   handleSubmit();
 })();
 
