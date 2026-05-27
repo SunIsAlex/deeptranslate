@@ -200,7 +200,35 @@
     margin-left: 8px;
     vertical-align: middle;
   }
-
+.highlight-sentence {
+  font-size: 17px;
+  line-height: 2.4;
+  margin: 8px 0 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+.hl-span {
+  position: relative;
+  padding: 2px 4px;
+  border-radius: 3px;
+  margin: 0 1px;
+  cursor: help;
+  transition: filter 0.15s;
+}
+.hl-span:hover { filter: brightness(0.92); }
+.hl-tag {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+  vertical-align: super;
+  user-select: none;
+}
+.hl-fallback {
+  color: var(--text-secondary);
+  font-style: italic;
+}
   @media (max-width: 720px) {
     .panels { grid-template-columns: 1fr; min-height: auto; }
     .panel { min-height: 200px; }

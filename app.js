@@ -114,15 +114,18 @@ function renderSentence(data) {
   }
 
   if (analysis?.components?.length) {
-    frag.appendChild(section("成分分析", analysis.components.map((c) => {
-      const li = document.createElement("li");
-      const role = el("span", "comp-role", c.role);
-      const text = el("span", "comp-text", c.text);
-      li.append(role, text);
-      if (c.note) li.appendChild(el("span", "comp-note", c.note));
-      return li;
-    })));
-  }
+  frag.appendChild(el("h4", "", "成分分析"));
+  frag.appendChild(renderHighlightedSentence(input, analysis.components));
+  // 原来的列表保留作为详细说明
+  const ul = document.createElement("ul");
+  analysis.components.forEach((c) => {
+    const li = document.createElement("li");
+    li.append(el("span", "comp-role", c.role), el("span", "comp-text", c.text));
+    if (c.note) li.appendChild(el("span", "comp-note", c.note));
+    ul.appendChild(li);
+  });
+  frag.appendChild(ul);
+}
 
   if (analysis?.grammar_points?.length) {
     frag.appendChild(section("语法点", analysis.grammar_points.map(textLi)));
@@ -162,3 +165,74 @@ function section(title, items) {
   if (mode) modeEl.value = mode;
   handleSubmit();
 })();
+
+
+// role → 颜色映射（柔和色板，和 Google 蓝主色不冲突）
+const ROLE_COLORS = {
+  "主语": "#e3f2fd",   // 浅蓝
+  "谓语": "#fff3e0",   // 浅橙
+  "宾语": "#e8f5e9",   // 浅绿
+  "表语": "#f3e5f5",   // 浅紫
+  "定语": "#fce4ec",   // 浅粉
+  "状语": "#fff9c4",   // 浅黄
+  "补语": "#e0f7fa",   // 浅青
+  "同位语": "#efebe9", // 浅棕
+  "插入语": "#eceff1", // 浅灰
+};
+
+/**
+ * 把原句按 components 切片渲染为高亮元素
+ * @param {string} input 原句
+ * @param {Array<{role, text, note}>} components 句法成分（按句中顺序）
+ * @returns {HTMLElement} 一个包含高亮片段的 div
+ */
+function renderHighlightedSentence(input, components) {
+  const wrap = document.createElement("div");
+  wrap.className = "highlight-sentence";
+
+  let cursor = 0;
+  for (const comp of components) {
+    // 在原句中定位 comp.text（从 cursor 开始找，避免重复词的误匹配）
+    const idx = input.indexOf(comp.text, cursor);
+    if (idx === -1) {
+      // 找不到（模型给出的片段与原句不完全一致），降级显示
+      const span = document.createElement("span");
+      span.className = "hl-fallback";
+      span.textContent = comp.text;
+      wrap.appendChild(span);
+      continue;
+    }
+
+    // 把 cursor 到 idx 之间的部分作为普通文本插入
+    if (idx > cursor) {
+      wrap.appendChild(document.createTextNode(input.slice(cursor, idx)));
+    }
+
+    // 高亮片段
+    const span = document.createElement("span");
+    span.className = "hl-span";
+    span.style.background = ROLE_COLORS[comp.role] || "#f5f5f5";
+    span.textContent = comp.text;
+    span.dataset.role = comp.role;
+    if (comp.note) {
+      span.title = `${comp.role} · ${comp.note}`;
+    } else {
+      span.title = comp.role;
+    }
+    // 角色标签（小字上标）
+    const tag = document.createElement("sub");
+    tag.className = "hl-tag";
+    tag.textContent = comp.role;
+    span.appendChild(tag);
+    wrap.appendChild(span);
+
+    cursor = idx + comp.text.length;
+  }
+
+  // 剩余部分
+  if (cursor < input.length) {
+    wrap.appendChild(document.createTextNode(input.slice(cursor)));
+  }
+
+  return wrap;
+}
