@@ -1,4 +1,3 @@
-// 与后端约定的接口路径
 const API_URL = "/api/translate";
 
 const inputEl = document.getElementById("input-text");
@@ -9,7 +8,6 @@ const outputEl = document.getElementById("output");
 
 submitBtn.addEventListener("click", handleSubmit);
 
-// Ctrl/Cmd + Enter 快捷提交
 inputEl.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
     e.preventDefault();
@@ -34,15 +32,12 @@ async function handleSubmit() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, mode: modeEl.value }),
     });
-
     const data = await res.json();
-
     if (!res.ok) {
-      setStatus(`请求失败：${data.error || res.status}`);
+      setStatus(data.message || data.error || `请求失败 ${res.status}`);
       return;
     }
-
-    setStatus("");
+    setStatus(data._cached ? "缓存" : "");
     render(data);
   } catch (err) {
     setStatus(`网络错误：${err.message}`);
@@ -56,87 +51,105 @@ function setStatus(msg) {
 }
 
 function render(data) {
-  if (data.type === "word") {
-    outputEl.appendChild(renderWord(data));
-  } else if (data.type === "sentence") {
-    outputEl.appendChild(renderSentence(data));
-  } else {
-    outputEl.textContent = JSON.stringify(data, null, 2);
-  }
+  const wrap = document.createElement("div");
+  wrap.className = "result";
+  if (data.type === "word") wrap.appendChild(renderWord(data));
+  else if (data.type === "sentence") wrap.appendChild(renderSentence(data));
+  else wrap.textContent = JSON.stringify(data, null, 2);
+  outputEl.innerHTML = "";
+  outputEl.appendChild(wrap);
 }
 
 function renderWord(data) {
   const { input, translation, analysis } = data;
-  const wrap = document.createElement("div");
+  const frag = document.createDocumentFragment();
 
-  wrap.appendChild(h("h3", `${input}  ${analysis?.phonetic || ""}  ${analysis?.pos || ""}`));
-  wrap.appendChild(h("p", `释义：${translation}`));
+  const h = document.createElement("h3");
+  h.textContent = input;
+  if (analysis?.phonetic) {
+    const ph = document.createElement("span");
+    ph.className = "phonetic";
+    ph.textContent = analysis.phonetic;
+    h.appendChild(ph);
+  }
+  if (analysis?.pos) {
+    const pos = document.createElement("span");
+    pos.className = "pos";
+    pos.textContent = analysis.pos;
+    h.appendChild(pos);
+  }
+  frag.appendChild(h);
+
+  frag.appendChild(el("div", "translation", translation));
 
   if (analysis?.morphology?.length) {
-    wrap.appendChild(h("h4", "构词分解"));
-    const ul = document.createElement("ul");
-    analysis.morphology.forEach((m) => {
+    frag.appendChild(section("构词分解", analysis.morphology.map((m) => {
       const li = document.createElement("li");
-      li.textContent = `${m.part}（${m.kind}）— ${m.meaning}`;
-      ul.appendChild(li);
-    });
-    wrap.appendChild(ul);
+      const p = el("span", "morph-part", m.part);
+      const k = el("span", "morph-kind", m.kind);
+      const meaning = document.createTextNode(m.meaning);
+      li.append(p, k, meaning);
+      return li;
+    })));
+  }
+
+  if (analysis?.etymology) {
+    frag.appendChild(section("词源", [textLi(analysis.etymology)]));
   }
 
   if (analysis?.examples?.length) {
-    wrap.appendChild(h("h4", "例句"));
-    const ul = document.createElement("ul");
-    analysis.examples.forEach((ex) => {
-      const li = document.createElement("li");
-      li.textContent = ex;
-      ul.appendChild(li);
-    });
-    wrap.appendChild(ul);
+    frag.appendChild(section("例句", analysis.examples.map(textLi)));
   }
 
-  return wrap;
+  return frag;
 }
 
 function renderSentence(data) {
   const { input, translation, analysis } = data;
-  const wrap = document.createElement("div");
+  const frag = document.createDocumentFragment();
 
-  wrap.appendChild(h("h3", input));
-  wrap.appendChild(h("p", `翻译：${translation}`));
+  frag.appendChild(el("h3", "", input));
+  frag.appendChild(el("div", "translation", translation));
 
   if (analysis?.structure) {
-    wrap.appendChild(h("p", `结构：${analysis.structure}`));
+    frag.appendChild(section("结构", [textLi(analysis.structure)]));
   }
 
   if (analysis?.components?.length) {
-    wrap.appendChild(h("h4", "成分分析"));
-    const ul = document.createElement("ul");
-    analysis.components.forEach((c) => {
+    frag.appendChild(section("成分分析", analysis.components.map((c) => {
       const li = document.createElement("li");
-      const note = c.note ? `（${c.note}）` : "";
-      li.textContent = `[${c.role}] ${c.text} ${note}`;
-      ul.appendChild(li);
-    });
-    wrap.appendChild(ul);
+      const role = el("span", "comp-role", c.role);
+      const text = el("span", "comp-text", c.text);
+      li.append(role, text);
+      if (c.note) li.appendChild(el("span", "comp-note", c.note));
+      return li;
+    })));
   }
 
   if (analysis?.grammar_points?.length) {
-    wrap.appendChild(h("h4", "语法点"));
-    const ul = document.createElement("ul");
-    analysis.grammar_points.forEach((g) => {
-      const li = document.createElement("li");
-      li.textContent = g;
-      ul.appendChild(li);
-    });
-    wrap.appendChild(ul);
+    frag.appendChild(section("语法点", analysis.grammar_points.map(textLi)));
   }
 
-  return wrap;
+  return frag;
 }
 
-// 小工具：创建带文本的元素
-function h(tag, text) {
-  const el = document.createElement(tag);
-  el.textContent = text;
-  return el;
+// 工具函数
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function textLi(text) {
+  return el("li", "", text);
+}
+
+function section(title, items) {
+  const sec = document.createElement("section");
+  sec.appendChild(el("h4", "", title));
+  const ul = document.createElement("ul");
+  items.forEach((item) => ul.appendChild(item));
+  sec.appendChild(ul);
+  return sec;
 }

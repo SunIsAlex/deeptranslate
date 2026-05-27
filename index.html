@@ -1,37 +1,245 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>英语翻译与语法分析</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>英语翻译与语法分析</title>
+<style>
+  :root {
+    --blue: #1a73e8;
+    --blue-hover: #1765cc;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --bg: #fff;
+    --bg-soft: #f8f9fa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+  header h1 b { color: var(--text); font-weight: 500; }
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    min-height: 360px;
+  }
+  .panel {
+    background: var(--bg);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    min-height: 28px;
+  }
+  .panel-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  select {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  select:hover { background: var(--bg-soft); }
+  textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    font-size: 22px;
+    font-family: inherit;
+    line-height: 1.4;
+    color: var(--text);
+    padding: 0;
+  }
+  textarea::placeholder { color: #bdc1c6; }
+  .output {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 15px;
+  }
+  .output-placeholder { color: #bdc1c6; font-size: 22px; }
+  .status {
+    color: var(--text-secondary);
+    font-size: 13px;
+    padding: 4px 0;
+    min-height: 22px;
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+  button {
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 22px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  button:hover { background: var(--blue-hover); }
+  button:disabled { background: #c4c7c5; cursor: default; }
+
+  /* 结果区样式 */
+  .result h3 {
+    margin: 0 0 12px;
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .result .phonetic {
+    color: var(--text-secondary);
+    font-weight: 400;
+    font-size: 16px;
+    margin-left: 8px;
+  }
+  .result .pos {
+    color: var(--blue);
+    font-style: italic;
+    font-size: 14px;
+    margin-left: 8px;
+  }
+  .result .translation {
+    font-size: 18px;
+    margin: 0 0 20px;
+  }
+  .result section { margin-bottom: 18px; }
+  .result h4 {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin: 0 0 8px;
+  }
+  .result ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .result li {
+    padding: 4px 0;
+    border-bottom: 1px solid var(--bg-soft);
+  }
+  .result li:last-child { border-bottom: none; }
+  .morph-part {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    color: var(--blue);
+    margin-right: 8px;
+  }
+  .morph-kind {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-right: 8px;
+  }
+  .comp-role {
+    display: inline-block;
+    background: var(--bg-soft);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    margin-right: 8px;
+    min-width: 36px;
+    text-align: center;
+  }
+  .comp-text {
+    font-weight: 500;
+  }
+  .comp-note {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-left: 6px;
+  }
+  .cached {
+    display: inline-block;
+    background: var(--bg-soft);
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  @media (max-width: 720px) {
+    .panels { grid-template-columns: 1fr; min-height: auto; }
+    .panel { min-height: 200px; }
+    textarea, .output-placeholder { font-size: 18px; }
+    main { padding: 12px; }
+  }
+</style>
 </head>
 <body>
-  <h1>英语翻译与语法分析</h1>
-
-  <section>
-    <label for="input-text">输入英文单词或句子</label>
-    <textarea id="input-text" rows="3" placeholder="例如：unbelievable / The old man the ship"></textarea>
-
-    <div>
-      <label>
-        模式：
-        <select id="mode">
-          <option value="auto">自动</option>
-          <option value="word">单词</option>
-          <option value="sentence">句子</option>
-        </select>
-      </label>
-
+  <header>
+    <h1><b>英语翻译</b> 与语法分析</h1>
+  </header>
+  <main>
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-label">英文</span>
+          <select id="mode" title="分析模式">
+            <option value="auto">自动</option>
+            <option value="word">单词</option>
+            <option value="sentence">句子</option>
+          </select>
+        </div>
+        <textarea id="input-text" placeholder="输入英文单词或句子"></textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-label">中文</span>
+          <span class="status" id="status"></span>
+        </div>
+        <div class="output" id="output">
+          <div class="output-placeholder">翻译结果</div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
       <button id="submit-btn">翻译</button>
     </div>
-  </section>
-
-  <section>
-    <h2>结果</h2>
-    <div id="status"></div>
-    <div id="output"></div>
-  </section>
-
+  </main>
   <script src="./app.js"></script>
 </body>
 </html>
