@@ -250,18 +250,18 @@
 .loading-stage {
   font-family: "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.7;
-  color: #4caf50;
-  background: #1e1e1e;
-  padding: 14px 16px;
-  border-radius: 6px;
+  line-height: 1.9;
+  color: var(--text-secondary);
+  background: transparent;
+  padding: 0;
+  margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  margin: 0;
 }
 .loading-stage::after {
   content: "▋";
-  color: #4caf50;
+  color: var(--blue);
+  margin-left: 2px;
   animation: blink 1s steps(2) infinite;
 }
 @keyframes blink {
