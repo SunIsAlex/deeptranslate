@@ -267,7 +267,7 @@ function renderHighlightedSentence(input, components) {
 
 copyBtn.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText(location.href);
+    await navigator.clipboard.writeText(`https://deeptranslate.sunisalex.org${location.pathname}`);
     copyBtn.textContent = "✓";
     copyBtn.classList.add("copied");
     setTimeout(() => {
