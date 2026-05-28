@@ -1,5 +1,9 @@
 {
-  "rewrites": [
+  "cloudFunctions": {
+    "nodejs": {
+      "maxDuration": 120
+    }
+  },"rewrites": [
     { "source": "/w/:text", "destination": "/index.html" },
     { "source": "/s/:text", "destination": "/index.html" }
   ]

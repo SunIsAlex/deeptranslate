@@ -1,8 +1,18 @@
 // POST /api/translate
 // 依赖 EdgeOne Pages KV：变量名假设为 KV（在控制台绑定时填的名字）
 // 注意：EdgeOne 的 KV 是全局变量，不在 env 上
-
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  try {
+    return await handleRequest(context);
+  } catch (e) {
+    console.error("unhandled:", e);
+    return new Response(
+      JSON.stringify({ error: "internal", detail: String(e) }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+}
+async function handleRequest({ request, env }) {
   const cors = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -55,7 +65,9 @@ export async function onRequestPost({ request, env }) {
         ],
         temperature: 0.2,
         response_format: { type: "json_object" },
+        thinking: {type:"disabled"}
       }),
+      eo: { timeoutSetting: { connectTimeout: 5000, readTimeout: 120000, writeTimeout: 5000 } }
     });
   } catch (e) {
     return json({ error: "upstream_unreachable", detail: String(e) }, 502, cors);
