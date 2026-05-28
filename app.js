@@ -7,6 +7,16 @@ const statusEl = document.getElementById("status");
 const outputEl = document.getElementById("output");
 const copyBtn = document.getElementById("copy-btn");
 
+
+// 加在工具函数区
+function setStage(line) {
+  let pre = outputEl.querySelector(".loading-stage");
+  if (!pre) {
+    outputEl.innerHTML = '<pre class="loading-stage"></pre>';
+    pre = outputEl.querySelector(".loading-stage");
+  }
+  pre.textContent += line + "\n";
+}
 // 加在 app.js 顶部工具区
 function detectType(text) {
   const trimmed = text.replace(/[.,!?;:'"()]/g, "").trim();
@@ -46,35 +56,67 @@ async function handleSubmit() {
     return;
   }
 
-  setStatus("分析中…");
   outputEl.innerHTML = "";
   submitBtn.disabled = true;
+  copyBtn.hidden = true;
+  setStatus("");
+
+  const mode = modeEl.value;
+  const t0 = performance.now();
+
+  setStage(`> input: "${truncate(text, 50)}"`);
+  setStage(`> mode: ${mode}  |  length: ${text.length} chars`);
 
   try {
+    const payload = JSON.stringify({ text, mode });
+    setStage(`> POST /api/translate  (${payload.length} bytes)`);
+
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, mode: modeEl.value }),
+      body: payload,
     });
+
+    const elapsed = Math.round(performance.now() - t0);
+    setStage(`> response: ${res.status} ${res.statusText}  (${elapsed}ms)`);
+
+    setStage(`> parsing JSON…`);
     const data = await res.json();
+
     if (!res.ok) {
       setStatus(data.message || data.error || `请求失败 ${res.status}`);
       return;
     }
+
+    const total = Math.round(performance.now() - t0);
+    setStage(`> type: ${data.type}  |  cached: ${data._cached ? "HIT" : "MISS"}  |  ${total}ms`);
+    setStage(`> rendering…`);
+
+    // 短暂停顿让用户看清最后一行,再渲染结果
+    await sleep(1000);
+
     setStatus(data._cached ? "缓存" : "");
-copyBtn.hidden = false;
-render(data);
-    // 提交时更新地址栏（不刷页面）
-    // handleSubmit 里成功拿到 data 之后
-const prefix = data.type === "word" ? "w" : "s";
-history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
+    copyBtn.hidden = false;
+    render(data);
+
+    // 更新地址栏
+    const prefix = data.type === "word" ? "w" : "s";
+    history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
   } catch (err) {
+    setStage(`> ERROR: ${err.message}`);
     setStatus(`网络错误：${err.message}`);
   } finally {
     submitBtn.disabled = false;
   }
 }
 
+// 工具函数
+function truncate(s, n) {
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 function setStatus(msg) {
   statusEl.textContent = msg;
 }

@@ -247,6 +247,27 @@
 }
 .icon-btn:hover { background: var(--bg-soft); }
 .icon-btn.copied { color: var(--blue); }
+.loading-stage {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #4caf50;
+  background: #1e1e1e;
+  padding: 14px 16px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+.loading-stage::after {
+  content: "▋";
+  color: #4caf50;
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
 </style>
 </head>
 <body>
