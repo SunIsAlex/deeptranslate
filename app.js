@@ -51,13 +51,13 @@ function genWordForms(word, inflections) {
 }
 
 // 把例句里所有匹配的词形包上 <mark>
-function highlightExample(text, word, inflections) {
-  const forms = genWordForms(word, inflections)
-    .sort((a, b) => b.length - a.length) // 长的优先,防止 say 抢先匹配掉 saying
-    .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")); // 转义正则元字符
-  if (!forms.length) return escapeHtml(text);
-  const re = new RegExp(`\\b(${forms.join("|")})\\b`, "gi");
-  return escapeHtml(text).replace(re, "<mark>$1</mark>");
+// 把例句里所有匹配的词形包上 <mark>
+// isPhrase=true 时，word 是词组，按各组成词分别生成变形再合并
+// 把例句中 [[...]] 标记转为 <mark>，无标记则原样显示
+function highlightExample(text) {
+  const escaped = escapeHtml(text);
+  // escapeHtml 不会动 [ ]，所以转义后 [[ ]] 仍在
+  return escaped.replace(/\[\[(.+?)\]\]/g, "<mark>$1</mark>");
 }
 function setStage(line) {
   let pre = outputEl.querySelector(".loading-stage");
@@ -67,28 +67,6 @@ function setStage(line) {
   }
   pre.textContent += line + "\n";
 }
-// 加在 app.js 顶部工具区
-function detectType(text) {
-  const trimmed = text.replace(/[.,!?;:'"()]/g, "").trim();
-  if (!trimmed) return "auto";
-  return /^[a-zA-Z-]+$/.test(trimmed) ? "word" : "sentence";
-}
-
-// 加在事件绑定区
-inputEl.addEventListener("input", () => {
-  if (modeEl.value === "auto" || modeEl.dataset.autoSet === "1") {
-    const detected = detectType(inputEl.value);
-    if (detected !== "auto") {
-      modeEl.value = detected;
-      modeEl.dataset.autoSet = "1"; // 标记是自动设置的
-    }
-  }
-});
-
-// 用户手动改 mode 时，清除自动标记，尊重用户选择
-modeEl.addEventListener("change", () => {
-  delete modeEl.dataset.autoSet;
-});
 
 submitBtn.addEventListener("click", handleSubmit);
 
@@ -150,7 +128,8 @@ async function handleSubmit() {
     render(data);
 
     // 更新地址栏
-    const prefix = data.type === "word" ? "w" : "s";
+    const prefixMap = { word: "w", phrase: "p", sentence: "s" };
+    const prefix = prefixMap[data.type] || "s";
     history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
   } catch (err) {
     setStage(`> ERROR: ${err.message}`);
@@ -175,6 +154,7 @@ function render(data) {
   const wrap = document.createElement("div");
   wrap.className = "result";
   if (data.type === "word") wrap.appendChild(renderWord(data));
+  else if (data.type === "phrase") wrap.appendChild(renderPhrase(data));
   else if (data.type === "sentence") wrap.appendChild(renderSentence(data));
   else wrap.textContent = JSON.stringify(data, null, 2);
   outputEl.innerHTML = "";
@@ -226,13 +206,49 @@ if (analysis?.inflections?.length) {
   const ul = document.createElement("ul");
   analysis.examples.forEach((ex) => {
     const li = document.createElement("li");
-    li.innerHTML = highlightExample(ex, input, analysis.inflections);
+    li.innerHTML = highlightExample(ex);
     ul.appendChild(li);
   });
   sec.appendChild(ul);
   frag.appendChild(sec);
 }
 
+  return frag;
+}
+
+function renderPhrase(data) {
+  const { input, translation, analysis } = data;
+  const frag = document.createDocumentFragment();
+
+  const h = document.createElement("h3");
+  h.textContent = input;
+  if (analysis?.pos) {
+    const pos = document.createElement("span");
+    pos.className = "pos";
+    pos.textContent = analysis.pos;
+    h.appendChild(pos);
+  }
+  frag.appendChild(h);
+
+  frag.appendChild(el("div", "translation", translation));
+
+  if (analysis?.usage) {
+    frag.appendChild(section("用法", [el("li", "", analysis.usage)]));
+  }
+
+  if (analysis?.examples?.length) {
+    const sec = document.createElement("section");
+    sec.appendChild(el("h4", "", "例句"));
+    const ul = document.createElement("ul");
+    analysis.examples.forEach((ex) => {
+      const li = document.createElement("li");
+li.innerHTML = highlightExample(ex);
+
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    frag.appendChild(sec);
+  }
   return frag;
 }
 
@@ -289,15 +305,15 @@ function section(title, items) {
   return sec;
 }
 
-// 页面加载时读取 URL 参数
-// 页面加载时（替换原来的 restoreFromUrl）
+// 页面加载时读取 URL 路径，恢复查询
 (function restoreFromUrl() {
-  const m = location.pathname.match(/^\/(w|s)\/(.+)$/);
+  const m = location.pathname.match(/^\/(w|p|s)\/(.+)$/);
   if (!m) return;
   const [, prefix, encoded] = m;
   const text = decodeURIComponent(encoded);
   inputEl.value = text;
-  modeEl.value = prefix === "w" ? "word" : "sentence";
+  // phrase 从 /p/ 进来设 auto，让模型重新判断
+  modeEl.value = prefix === "w" ? "word" : prefix === "s" ? "sentence" : "auto";
   handleSubmit();
 })();
 
@@ -385,4 +401,3 @@ copyBtn.addEventListener("click", async () => {
     setStatus("复制失败");
   }
 });
-

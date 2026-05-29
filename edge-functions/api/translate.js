@@ -32,23 +32,24 @@ async function handleRequest({ request, env }) {
   if (text.length > 2000) return json({ error: "text_too_long" }, 400, cors);
 
   const mode = body.mode || "auto";
-  const type = resolveType(text, mode);
+  const route = resolveRoute(text, mode);
 
   // ===== KV 缓存查询 =====
-  const cacheKey = await buildCacheKey(type, text);
+  const cacheKey = await buildCacheKey(route, text);
   const cached = await readCache(cacheKey);
   if (cached) {
-    return json({ ...cached, _cached: true }, 200, cors);
+    return json({ ...cached, input: text, _cached: true }, 200, cors);
   }
 
   // ===== 缓存未命中，调用模型 =====
-  const prompt = type === "word" ? wordPrompt(text) : sentencePrompt(text);
+  let prompt;
+  if (route === "word") prompt = wordPrompt(text);
+  else if (route === "sentence") prompt = sentencePrompt(text);
+  else prompt = autoPrompt(text); // 档3：模糊（2-4词无句末标点），模型自己分类
 
   const apiKey = env.DEEPSEEK_API_KEY;
   const model = env.DEEPSEEK_MODEL || "deepseek-chat";
   const apiUrl = env.DEEPSEEK_API_URL || "https://api.deepseek.com/chat/completions";
-  console.log("env:", JSON.stringify(env, null, 2));
-  console.log("apiKey:", apiKey, "model:", model, "apiUrl:", apiUrl);
   let upstream;
   try {
     upstream = await fetch(apiUrl, {
@@ -60,7 +61,7 @@ async function handleRequest({ request, env }) {
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: "你是英语语言学助手，严格按用户要求只输出 JSON，不要任何额外文字、markdown 或代码块。" },
+          { role: "system", content: "你是英语语言学助手。严格只输出 JSON,不要任何额外文字、markdown 或代码块。在 examples 例句中,把目标单词/词组实际出现的形态用 [[ ]] 括起来(如 He finally [[paid off]] his debts.),只括英文部分,中文翻译里不要加。" },
           { role: "user", content: prompt },
         ],
         temperature: 0.2,
@@ -89,7 +90,10 @@ async function handleRequest({ request, env }) {
   }
 
   parsed = cleanCJKSpaces(parsed);
-  const result = { type, input: text, ...parsed };
+
+  // auto 路由：type 由模型返回；word/sentence 路由：type 即 route
+  const finalType = route === "auto" ? (parsed.type || "sentence") : route;
+  const result = { input: text, ...parsed, type: finalType };
 
   // ===== 写入缓存（失败不影响主流程）=====
   writeCache(cacheKey, result).catch((e) => {
@@ -113,23 +117,21 @@ export async function onRequestOptions() {
 
 // ============ KV 缓存逻辑 ============
 
-const CACHE_VERSION = "v1";       // prompt 或输出结构变了就 bump 这个
+const CACHE_VERSION = "v2";       // 结构变更（新增 phrase / auto 路由）→ 已 bump
 const CACHE_TTL_SEC = 60 * 60 * 24 * 30;  // 30 天
 
-async function buildCacheKey(type, text) {
-  // 单词模式：转小写，提升命中率
-  // 句子模式：保留原文（大小写有语义）
-  const normalized = type === "word" ? text.toLowerCase() : text;
+async function buildCacheKey(route, text) {
+  // word 路由转小写提升命中率；其余保留原文
+  const normalized = route === "word" ? text.toLowerCase() : text;
 
   // KV 键名长度有限，超过阈值用 hash；短文本直接用原文方便调试
   if (normalized.length <= 80) {
-    // 替换 KV 不允许的字符（空格、斜杠、引号等）
     const safe = normalized.replace(/[\s/\\'"]+/g, "_");
-    return `tr:${CACHE_VERSION}:${type}:${safe}`;
+    return `tr:${CACHE_VERSION}:${route}:${safe}`;
   }
 
   const hash = await sha256(normalized);
-  return `tr:${CACHE_VERSION}:${type}:${hash}`;
+  return `tr:${CACHE_VERSION}:${route}:${hash}`;
 }
 
 async function sha256(s) {
@@ -160,15 +162,20 @@ async function writeCache(key, value) {
   });
 }
 
-// ============ 业务逻辑 ============
+// ============ 路由判断 ============
+// 档1：单 token → word；档2：明显句子 → sentence；档3：2-4词模糊 → auto（模型判断）
 
-function resolveType(text, mode) {
+function resolveRoute(text, mode) {
   if (mode === "word" || mode === "sentence") return mode;
   const trimmed = text.replace(/[.,!?;:'"()]/g, "").trim();
-  // 无空格 + 只有字母和连字符 → 单词
-  if (/^[a-zA-Z-]+$/.test(trimmed)) return "word";
-  return "sentence";
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  const hasSentenceEnd = /[.!?]$/.test(text.trim());
+  if (wordCount === 1) return "word";
+  if (hasSentenceEnd || wordCount >= 5) return "sentence";
+  return "auto";
 }
+
+// ============ Prompts ============
 
 function wordPrompt(word) {
   return `分析英文单词："${word}"。只输出 JSON：
@@ -210,6 +217,26 @@ function sentencePrompt(sentence) {
 - components 按句子中出现顺序排列
 - grammar_points 聚焦于学习者易忽略的点（从句、非谓语、虚拟语气、倒装等），没有则返回空数组
 - 中文字符之间不要插入空格`;
+}
+
+function autoPrompt(text) {
+  return `判断并分析:"${text}"。它可能是:
+- word:单词
+- phrase:词组/短语动词/固定搭配(如 pay off、give up、look forward to)
+- sentence:句子
+
+只输出 JSON。
+
+word:
+{ "type":"word", "translation":"释义,/分隔最多3个", "analysis":{ "pos":"词性", "phonetic":"音标带//", "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
+
+phrase:
+{ "type":"phrase", "translation":"整体含义,/分隔", "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
+
+sentence:
+{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }
+
+要求:type 必须准确,pay off 类短语动词是 phrase 不是 sentence;word 的 inflections 只列不规则变化,规则的返回 [];所有中文字符间不加空格。`;
 }
 
 // ============ 工具函数 ============
