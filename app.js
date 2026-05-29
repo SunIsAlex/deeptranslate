@@ -9,6 +9,56 @@ const copyBtn = document.getElementById("copy-btn");
 
 
 // 加在工具函数区
+// 转义,防 XSS(因为高亮要用 innerHTML)
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// 生成所有可能的词形:原词 + 后端不规则变形 + 前端规则推导
+function genWordForms(word, inflections) {
+  const forms = new Set([word.toLowerCase()]);
+  (inflections || []).forEach((inf) => {
+    if (inf.form) forms.add(inf.form.toLowerCase());
+  });
+  const w = word.toLowerCase();
+  // 规则变形推导
+  forms.add(w + "s");
+  forms.add(w + "es");
+  forms.add(w + "ed");
+  forms.add(w + "ing");
+  forms.add(w + "d");
+  // 去 e 类:make → making / made
+  if (w.endsWith("e")) {
+    const stem = w.slice(0, -1);
+    forms.add(stem + "ing");
+    forms.add(stem + "ed");
+  }
+  // 变 y 类:study → studies / studied
+  if (w.endsWith("y")) {
+    const stem = w.slice(0, -1);
+    forms.add(stem + "ies");
+    forms.add(stem + "ied");
+  }
+  // 双写末辅音:stop → stopped / stopping(简单启发式:CVC 结尾)
+  if (/[^aeiou][aeiou][^aeiouwxy]$/.test(w)) {
+    const last = w[w.length - 1];
+    forms.add(w + last + "ed");
+    forms.add(w + last + "ing");
+  }
+  return [...forms];
+}
+
+// 把例句里所有匹配的词形包上 <mark>
+function highlightExample(text, word, inflections) {
+  const forms = genWordForms(word, inflections)
+    .sort((a, b) => b.length - a.length) // 长的优先,防止 say 抢先匹配掉 saying
+    .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")); // 转义正则元字符
+  if (!forms.length) return escapeHtml(text);
+  const re = new RegExp(`\\b(${forms.join("|")})\\b`, "gi");
+  return escapeHtml(text).replace(re, "<mark>$1</mark>");
+}
 function setStage(line) {
   let pre = outputEl.querySelector(".loading-stage");
   if (!pre) {
@@ -152,7 +202,13 @@ function renderWord(data) {
   frag.appendChild(h);
 
   frag.appendChild(el("div", "translation", translation));
-
+if (analysis?.inflections?.length) {
+  frag.appendChild(section("词形变化",
+    analysis.inflections.map((inf) =>
+      el("li", "", `${inf.form} — ${inf.label}`)
+    )
+  ));
+}
   if (analysis?.morphology?.length) {
     frag.appendChild(section("构词分解", analysis.morphology.map((m) => {
       const li = document.createElement("li");
@@ -165,8 +221,17 @@ function renderWord(data) {
   }
 
   if (analysis?.examples?.length) {
-    frag.appendChild(section("例句", analysis.examples.map(textLi)));
-  }
+  const sec = document.createElement("section");
+  sec.appendChild(el("h4", "", "例句"));
+  const ul = document.createElement("ul");
+  analysis.examples.forEach((ex) => {
+    const li = document.createElement("li");
+    li.innerHTML = highlightExample(ex, input, analysis.inflections);
+    ul.appendChild(li);
+  });
+  sec.appendChild(ul);
+  frag.appendChild(sec);
+}
 
   return frag;
 }

@@ -171,24 +171,26 @@ function resolveType(text, mode) {
 }
 
 function wordPrompt(word) {
-  return `分析英文单词："${word}"。只输出 JSON，结构如下：
+  return `分析英文单词："${word}"。只输出 JSON：
 {
-  "translation": "中文释义（多个义项用 / 分隔）",
+  "translation": "中文释义,多义用 / 分隔,最多 3 个义项",
   "analysis": {
-    "pos": "词性，如 n./v./adj.",
-    "phonetic": "音标（英式或美式皆可，带 / /）",
+    "pos": "词性,如 n./v./adj.",
+    "phonetic": "音标,带 / /",
+    "inflections": [
+      { "form": "变形", "label": "类型,如 过去式/过去分词/复数/比较级" }
+    ],
     "morphology": [
-      { "part": "构词成分", "kind": "prefix|root|suffix|combining_form", "meaning": "该成分的含义" }
+      { "part": "构词成分", "kind": "prefix|root|suffix|combining_form", "meaning": "含义,不超过6字" }
     ],
     "examples": ["英文例句1 — 中文翻译", "英文例句2 — 中文翻译"]
   }
 }
-要求：
-- morphology 必须按单词中出现的顺序列出
-- 当词根接后缀时如有拼写变化（如去 e、双写、变 y 为 i），part 必须反映实际拼写形式，不是原形。例如 unbelievable 拆为 un- / believ / -able
-- combining_form 用于希腊/拉丁源的实义构词成分（如 arthro-, -pod, bio-, -logy）
-- 中文字符之间不要插入空格
-- 如果是单纯词无可拆分成分，morphology 返回空数组`;
+要求:
+- inflections 只列不规则或值得注意的曲折变化(如 say→said、child→children、good→better/best);规则变化(直接加 -s/-ed/-ing)或无变化的词返回 []
+- morphology 按词中顺序排列;接后缀有拼写变化时 part 用实际形式(如 unbelievable → un-/believ/-able);combining_form 用于希腊/拉丁实义成分(arthro-/-pod/bio-)
+- 单纯词 morphology 返回 []
+- 所有中文简洁,字符间不加空格`;
 }
 
 function sentencePrompt(sentence) {
