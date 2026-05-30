@@ -60,7 +60,7 @@ function renderWord(data) {
     const ul = document.createElement("ul");
     analysis.examples.forEach((ex) => {
       const li = document.createElement("li");
-      li.innerHTML = highlightExample(ex);
+      li.innerHTML = highlightExample(ex, input, analysis.inflections);
       ul.appendChild(li);
     });
     sec.appendChild(ul);
@@ -96,7 +96,7 @@ function renderPhrase(data) {
     const ul = document.createElement("ul");
     analysis.examples.forEach((ex) => {
       const li = document.createElement("li");
-      li.innerHTML = highlightExample(ex);
+      li.innerHTML = highlightExample(ex, input);
       ul.appendChild(li);
     });
     sec.appendChild(ul);
@@ -133,7 +133,7 @@ function renderZh(data) {
       if (t.example) {
         const ex = document.createElement("div");
         ex.className = "zh-example";
-        ex.innerHTML = highlightExample(t.example);
+        ex.innerHTML = highlightExample(t.example, t.en);
         sec.appendChild(ex);
       }
       frag.appendChild(sec);
