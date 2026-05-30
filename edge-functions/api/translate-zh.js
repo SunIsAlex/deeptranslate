@@ -72,17 +72,17 @@ async function handle({ request, env }) {
 }
 
 function zhPrompt(text) {
-  return `\u628a\u4e2d\u6587"${text}"\u7ffb\u8bd1\u6210\u82f1\u6587\u3002\u5224\u65ad\u5b83\u662f\u8bcd/\u77ed\u8bed\u8fd8\u662f\u53e5\u5b50\u3002\u53ea\u8f93\u51fa json\uff1a
+  return `把中文"${text}"翻译成英文。判断它是词/短语还是句子。只输出 json：
 {
   "type": "word|phrase|sentence",
   "translations": [
-    { "en": "\u82f1\u6587\u8868\u8fbe", "note": "\u7528\u6cd5/\u8bed\u57df\u533a\u522b\uff0c\u226420\u5b57", "example": "\u82f1\u6587\u4f8b\u53e5 \u2014 \u4e2d\u6587\u7ffb\u8bd1" }
+    { "en": "英文表达", "note": "用法/语域区别，≤20字", "example": "英文例句 — 中文翻译" }
   ]
 }
-\u8981\u6c42\uff1a
-- \u7ed9 2-4 \u4e2a\u5907\u9009\u82f1\u6587\u8868\u8fbe\uff0c\u6309\u5e38\u7528\u5ea6\u6392\u5e8f
-- note \u8bf4\u660e\u5404\u8868\u8fbe\u7684\u533a\u522b\uff08\u6b63\u5f0f/\u53e3\u8bed/\u8bed\u6c14/\u9002\u7528\u573a\u666f\uff09\uff0c\u82e5\u65e0\u660e\u663e\u533a\u522b\u53ef\u7559\u7a7a\u5b57\u7b26\u4e32
-- example \u4e2d\u76ee\u6807\u82f1\u6587\u8868\u8fbe\u7528 [[ ]] \u62ec\u8d77
-- \u53e5\u5b50\u8f93\u5165\u65f6\u7ed9 1-2 \u4e2a\u6700\u5730\u9053\u7684\u6574\u53e5\u7ffb\u8bd1\u5373\u53ef
-- \u6240\u6709\u4e2d\u6587\u5b57\u7b26\u95f4\u4e0d\u52a0\u7a7a\u683c`;
+要求：
+- 词或短语：给 2-4 个备选英文表达，按常用度排序；note 说明各表达的区别（正式/口语/语气/适用场景），若无明显区别可留空字符串
+- 句子：只给 1 个最地道的译法，不要 example 字段（句子本身就是完整翻译，无需再举例）
+- example 中目标英文表达用 [[ ]] 括起来
+- 句子输入时给 1 个最地道的整句翻译即可
+- 所有中文字符间不加空格`;
 }
