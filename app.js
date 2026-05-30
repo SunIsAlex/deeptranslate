@@ -1,5 +1,3 @@
-const API_URL = "/api/translate";
-
 const inputEl = document.getElementById("input-text");
 const modeEl = document.getElementById("mode");
 const submitBtn = document.getElementById("submit-btn");
@@ -50,9 +48,6 @@ function genWordForms(word, inflections) {
   return [...forms];
 }
 
-// 把例句里所有匹配的词形包上 <mark>
-// 把例句里所有匹配的词形包上 <mark>
-// isPhrase=true 时，word 是词组，按各组成词分别生成变形再合并
 // 把例句中 [[...]] 标记转为 <mark>，无标记则原样显示
 function highlightExample(text) {
   const escaped = escapeHtml(text);
@@ -66,6 +61,11 @@ function setStage(line) {
     pre = outputEl.querySelector(".loading-stage");
   }
   pre.textContent += line + "\n";
+}
+
+// 根据输入是否含中文判断翻译方向
+function detectDirection(text) {
+  return /[\u4e00-\u9fa5]/.test(text) ? "zh2en" : "en2zh";
 }
 
 submitBtn.addEventListener("click", handleSubmit);
@@ -89,17 +89,22 @@ async function handleSubmit() {
   copyBtn.hidden = true;
   setStatus("");
 
+  const direction = detectDirection(text);
+  const apiUrl = direction === "zh2en" ? "/api/translate-zh" : "/api/translate";
   const mode = modeEl.value;
   const t0 = performance.now();
 
   setStage(`> input: "${truncate(text, 50)}"`);
-  setStage(`> mode: ${mode}  |  length: ${text.length} chars`);
+  setStage(`> direction: ${direction}  |  length: ${text.length} chars`);
 
   try {
-    const payload = JSON.stringify({ text, mode });
-    setStage(`> POST /api/translate  (${payload.length} bytes)`);
+    // zh2en 不需要 mode；en2zh 带上 mode
+    const payload = direction === "zh2en"
+      ? JSON.stringify({ text })
+      : JSON.stringify({ text, mode });
+    setStage(`> POST ${apiUrl}  (${payload.length} bytes)`);
 
-    const res = await fetch(API_URL, {
+    const res = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
@@ -117,7 +122,8 @@ async function handleSubmit() {
     }
 
     const total = Math.round(performance.now() - t0);
-    setStage(`> type: ${data.type}  |  cached: ${data._cached ? "HIT" : "MISS"}  |  ${total}ms`);
+    const typeLabel = data.direction === "zh2en" ? "zh2en" : data.type;
+    setStage(`> type: ${typeLabel}  |  cached: ${data._cached ? "HIT" : "MISS"}  |  ${total}ms`);
     setStage(`> rendering…`);
 
     // 短暂停顿让用户看清最后一行,再渲染结果
@@ -128,9 +134,13 @@ async function handleSubmit() {
     render(data);
 
     // 更新地址栏
-    const prefixMap = { word: "w", phrase: "p", sentence: "s" };
-    const prefix = prefixMap[data.type] || "s";
-    history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
+    if (data.direction === "zh2en") {
+      history.pushState(null, "", `/zh/${encodeURIComponent(text)}`);
+    } else {
+      const prefixMap = { word: "w", phrase: "p", sentence: "s" };
+      const prefix = prefixMap[data.type] || "s";
+      history.pushState(null, "", `/${prefix}/${encodeURIComponent(text)}`);
+    }
   } catch (err) {
     setStage(`> ERROR: ${err.message}`);
     setStatus(`网络错误：${err.message}`);
@@ -153,7 +163,8 @@ function setStatus(msg) {
 function render(data) {
   const wrap = document.createElement("div");
   wrap.className = "result";
-  if (data.type === "word") wrap.appendChild(renderWord(data));
+  if (data.direction === "zh2en") wrap.appendChild(renderZh(data));
+  else if (data.type === "word") wrap.appendChild(renderWord(data));
   else if (data.type === "phrase") wrap.appendChild(renderPhrase(data));
   else if (data.type === "sentence") wrap.appendChild(renderSentence(data));
   else wrap.textContent = JSON.stringify(data, null, 2);
@@ -242,13 +253,52 @@ function renderPhrase(data) {
     const ul = document.createElement("ul");
     analysis.examples.forEach((ex) => {
       const li = document.createElement("li");
-li.innerHTML = highlightExample(ex);
-
+      li.innerHTML = highlightExample(ex);
       ul.appendChild(li);
     });
     sec.appendChild(ul);
     frag.appendChild(sec);
   }
+  return frag;
+}
+
+// 中译英渲染：多个英文备选，每个含 用法区别 + 例句
+function renderZh(data) {
+  const { input, translations } = data;
+  const frag = document.createDocumentFragment();
+
+  frag.appendChild(el("h3", "", input));
+
+  if (translations?.length) {
+    translations.forEach((t) => {
+      const sec = document.createElement("section");
+      sec.className = "zh-item";
+
+      // 英文表达（大字，[[ ]] 高亮）
+      const en = document.createElement("div");
+      en.className = "zh-en";
+      en.innerHTML = highlightExample(t.en || "");
+      sec.appendChild(en);
+
+      // 用法区别（可能为空）
+      if (t.note && t.note.trim()) {
+        sec.appendChild(el("div", "zh-note", t.note));
+      }
+
+      // 例句（[[ ]] 高亮）
+      if (t.example) {
+        const ex = document.createElement("div");
+        ex.className = "zh-example";
+        ex.innerHTML = highlightExample(t.example);
+        sec.appendChild(ex);
+      }
+
+      frag.appendChild(sec);
+    });
+  } else {
+    frag.appendChild(el("div", "translation", "未获得翻译结果"));
+  }
+
   return frag;
 }
 
@@ -307,6 +357,15 @@ function section(title, items) {
 
 // 页面加载时读取 URL 路径，恢复查询
 (function restoreFromUrl() {
+  // /zh/中文 → 中译英
+  const zhMatch = location.pathname.match(/^\/zh\/(.+)$/);
+  if (zhMatch) {
+    inputEl.value = decodeURIComponent(zhMatch[1]);
+    handleSubmit(); // 内部按含中文自动判断走 zh2en
+    return;
+  }
+
+  // /w/ /p/ /s/ → 英译中
   const m = location.pathname.match(/^\/(w|p|s)\/(.+)$/);
   if (!m) return;
   const [, prefix, encoded] = m;
