@@ -21,6 +21,7 @@ function renderWord(data) {
 
   const h = document.createElement("h3");
   h.textContent = input;
+  
   if (analysis?.phonetic) {
     const ph = document.createElement("span");
     ph.className = "phonetic";
@@ -36,6 +37,9 @@ function renderWord(data) {
   frag.appendChild(h);
 
   frag.appendChild(el("div", "translation", translation));
+  if (analysis?.fullForm) {
+  frag.appendChild(el("div", "full-form", analysis.fullForm));
+}
   if (analysis?.inflections?.length) {
     frag.appendChild(section("词形变化",
       analysis.inflections.map((inf) =>

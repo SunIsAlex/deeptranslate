@@ -6,7 +6,7 @@ import {
   stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache,
 } from "../_lib/translate-core.js";
 
-const SYSTEM = "\u4f60\u662f\u82f1\u8bed\u8bed\u8a00\u5b66\u52a9\u624b\u3002\u4e25\u683c\u53ea\u8f93\u51fa json\uff0c\u4e0d\u8981\u4efb\u4f55\u989d\u5916\u6587\u5b57\u3001markdown \u6216\u4ee3\u7801\u5757\u3002\u5728 examples \u4f8b\u53e5\u4e2d\uff0c\u628a\u76ee\u6807\u5355\u8bcd/\u8bcd\u7ec4\u5b9e\u9645\u51fa\u73b0\u7684\u5f62\u6001\u7528 [[ ]] \u62ec\u8d77\u6765\uff08\u5982 He finally [[paid off]] his debts.\uff09\uff0c\u53ea\u62ec\u82f1\u6587\u90e8\u5206\uff0c\u4e2d\u6587\u7ffb\u8bd1\u91cc\u4e0d\u8981\u52a0\u3002";
+const SYSTEM = "你是英语语言学助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 examples 例句中，把目标单词/词组实际出现的形态用 [[ ]] 括起来（如 He finally [[paid off]] his debts.），只括英文部分，中文翻译里不要加。";
 
 export async function onRequestPost(context) {
   try {
@@ -86,57 +86,60 @@ function resolveRoute(text, mode) {
 }
 
 function wordPrompt(word) {
-  return `\u5206\u6790\u82f1\u6587\u5355\u8bcd\uff1a"${word}"\u3002\u53ea\u8f93\u51fa json\uff1a
+  return `分析英文单词："${word}"。只输出 json：
 {
-  "translation": "\u4e2d\u6587\u91ca\u4e49,\u591a\u4e49\u7528 / \u5206\u9694,\u6700\u591a 3 \u4e2a\u4e49\u9879",
+  "translation": "中文释义,多义用 / 分隔,最多 3 个义项",
   "analysis": {
-    "pos": "\u8bcd\u6027,\u5982 n./v./adj.",
-    "phonetic": "\u97f3\u6807,\u5e26 / /",
-    "inflections": [ { "form": "\u53d8\u5f62", "label": "\u7c7b\u578b,\u5982 \u8fc7\u53bb\u5f0f/\u8fc7\u53bb\u5206\u8bcd/\u590d\u6570/\u6bd4\u8f83\u7ea7" } ],
-    "morphology": [ { "part": "\u6784\u8bcd\u6210\u5206", "kind": "prefix|root|suffix|combining_form", "meaning": "\u542b\u4e49,\u4e0d\u8d85\u8fc76\u5b57" } ],
-    "examples": ["\u82f1\u6587\u4f8b\u53e51 \u2014 \u4e2d\u6587\u7ffb\u8bd1", "\u82f1\u6587\u4f8b\u53e52 \u2014 \u4e2d\u6587\u7ffb\u8bd1"]
+    "pos": "词性,如 n./v./adj./abbr.",
+    "phonetic": "音标,带 / /",
+    "fullForm": "仅当输入是首字母缩略词(如 NATO/FBI/UNESCO)时给出完整展开,如 North Atlantic Treaty Organization；其他词返回空字符串",
+    "inflections": [ { "form": "变形", "label": "类型,如 过去式/过去分词/复数/比较级" } ],
+    "morphology": [ { "part": "构词成分", "kind": "prefix|root|suffix|combining_form|abbr", "meaning": "含义,不超过6字" } ],
+    "examples": ["英文例句1 — 中文翻译", "英文例句2 — 中文翻译"]
   }
 }
-\u8981\u6c42:
-- inflections \u53ea\u5217\u4e0d\u89c4\u5219\u6216\u503c\u5f97\u6ce8\u610f\u7684\u66f2\u6298\u53d8\u5316(\u5982 say\u2192said\u3001child\u2192children\u3001good\u2192better/best);\u89c4\u5219\u53d8\u5316(\u76f4\u63a5\u52a0 -s/-ed/-ing)\u6216\u65e0\u53d8\u5316\u7684\u8bcd\u8fd4\u56de []
-- morphology \u6309\u8bcd\u4e2d\u987a\u5e8f\u6392\u5217;\u63a5\u540e\u7f00\u6709\u62fc\u5199\u53d8\u5316\u65f6 part \u7528\u5b9e\u9645\u5f62\u5f0f(\u5982 unbelievable \u2192 un-/believ/-able);combining_form \u7528\u4e8e\u5e0c\u814a/\u62c9\u4e01\u5b9e\u4e49\u6210\u5206(arthro-/-pod/bio-)
-- \u5355\u7eaf\u8bcd morphology \u8fd4\u56de []
-- \u6240\u6709\u4e2d\u6587\u7b80\u6d01,\u5b57\u7b26\u95f4\u4e0d\u52a0\u7a7a\u683c`;
+要求:
+- inflections 只列不规则或值得注意的曲折变化(如 say→said、child→children、good→better/best);规则变化(直接加 -s/-ed/-ing)或无变化的词返回 []
+- morphology 按词中顺序排列;接后缀有拼写变化时 part 用实际形式(如 unbelievable → un-/believ/-able);combining_form 用于希腊/拉丁实义成分(arthro-/-pod/bio-)
+- 若输入是首字母缩略词(initialism,如 NATO/FBI):fullForm 给完整展开式,morphology 每个字母一条、kind 用 abbr、meaning 是该字母对应的英文单词(如 N→North)
+- 截断类缩写(Dr./etc./approx.)或普通词:fullForm 返回空字符串,morphology 按原规则处理
+- 单纯词 morphology 返回 []
+- 所有中文简洁,字符间不加空格`;
 }
 
 function sentencePrompt(sentence) {
-  return `\u5206\u6790\u82f1\u6587\u53e5\u5b50\uff1a"${sentence}"\u3002\u53ea\u8f93\u51fa json\uff0c\u7ed3\u6784\u5982\u4e0b\uff1a
+  return `分析英文句子："${sentence}"。只输出 json，结构如下：
 {
-  "translation": "\u5730\u9053\u7684\u4e2d\u6587\u7ffb\u8bd1",
+  "translation": "地道的中文翻译",
   "analysis": {
-    "structure": "\u9ad8\u5c42\u53e5\u6cd5\u7ed3\u6784",
-    "components": [ { "role": "\u4e3b\u8bed|\u8c13\u8bed|\u5bbe\u8bed|\u8868\u8bed|\u5b9a\u8bed|\u72b6\u8bed|\u8865\u8bed|\u540c\u4f4d\u8bed|\u63d2\u5165\u8bed", "text": "\u5bf9\u5e94\u539f\u6587\u7247\u6bb5", "note": "\u7b80\u8981\u8bf4\u660e" } ],
-    "grammar_points": ["\u91cd\u8981\u8bed\u6cd5\u70b9"]
+    "structure": "高层句法结构",
+    "components": [ { "role": "主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语", "text": "对应原文片段", "note": "简要说明" } ],
+    "grammar_points": ["重要语法点"]
   }
 }
-\u8981\u6c42\uff1a
-- role \u5fc5\u987b\u4ece\u7ed9\u5b9a\u679a\u4e3e\u503c\u4e2d\u9009\u53d6
-- components \u6309\u53e5\u5b50\u4e2d\u51fa\u73b0\u987a\u5e8f\u6392\u5217
-- grammar_points \u805a\u7126\u4e8e\u5b66\u4e60\u8005\u6613\u5ffd\u7565\u7684\u70b9\uff08\u4ece\u53e5\u3001\u975e\u8c13\u8bed\u3001\u865a\u62df\u8bed\u6c14\u3001\u5012\u88c5\u7b49\uff09\uff0c\u6ca1\u6709\u5219\u8fd4\u56de\u7a7a\u6570\u7ec4
-- \u4e2d\u6587\u5b57\u7b26\u4e4b\u95f4\u4e0d\u8981\u63d2\u5165\u7a7a\u683c`;
+要求：
+- role 必须从给定枚举值中选取
+- components 按句子中出现顺序排列
+- grammar_points 聚焦于学习者易忽略的点（从句、非谓语、虚拟语气、倒装等），没有则返回空数组
+- 中文字符之间不要插入空格`;
 }
 
 function autoPrompt(text) {
-  return `\u5224\u65ad\u5e76\u5206\u6790:"${text}"\u3002\u5b83\u53ef\u80fd\u662f:
-- word:\u5355\u8bcd
-- phrase:\u8bcd\u7ec4/\u77ed\u8bed\u52a8\u8bcd/\u56fa\u5b9a\u642d\u914d(\u5982 pay off\u3001give up\u3001look forward to)
-- sentence:\u53e5\u5b50
+  return `判断并分析:"${text}"。它可能是:
+- word:单词
+- phrase:词组/短语动词/固定搭配(如 pay off、give up、look forward to)
+- sentence:句子
 
-\u53ea\u8f93\u51fa json\u3002
+只输出 json。
 
 word:
-{ "type":"word", "translation":"\u91ca\u4e49,/\u5206\u9694\u6700\u591a3\u4e2a", "analysis":{ "pos":"\u8bcd\u6027", "phonetic":"\u97f3\u6807\u5e26//", "inflections":[{"form":"\u53d8\u5f62","label":"\u7c7b\u578b"}], "morphology":[{"part":"\u6210\u5206","kind":"prefix|root|suffix|combining_form","meaning":"\u542b\u4e49\u22646\u5b57"}], "examples":["\u4f8b\u53e5 \u2014 \u7ffb\u8bd1"] } }
+{ "type":"word", "translation":"释义,/分隔最多3个", "analysis":{ "pos":"词性", "phonetic":"音标带//", "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
 
 phrase:
-{ "type":"phrase", "translation":"\u6574\u4f53\u542b\u4e49,/\u5206\u9694", "analysis":{ "pos":"\u5982 \u77ed\u8bed\u52a8\u8bcd/\u56fa\u5b9a\u642d\u914d", "usage":"\u7528\u6cd5/\u53ef\u5206\u6027,\u226430\u5b57", "examples":["\u4f8b\u53e5 \u2014 \u7ffb\u8bd1","\u4f8b\u53e5 \u2014 \u7ffb\u8bd1"] } }
+{ "type":"phrase", "translation":"整体含义,/分隔", "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
 
 sentence:
-{ "type":"sentence", "translation":"\u5730\u9053\u7ffb\u8bd1", "analysis":{ "structure":"\u53e5\u6cd5\u7ed3\u6784\u6982\u62ec", "components":[{"role":"\u4e3b\u8bed|\u8c13\u8bed|\u5bbe\u8bed|\u8868\u8bed|\u5b9a\u8bed|\u72b6\u8bed|\u8865\u8bed|\u540c\u4f4d\u8bed|\u63d2\u5165\u8bed","text":"\u7247\u6bb5","note":"\u8bf4\u660e\u226415\u5b57"}], "grammar_points":["\u8bed\u6cd5\u70b9,\u6700\u591a2\u6761\u226420\u5b57"] } }
+{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }
 
-\u8981\u6c42:type \u5fc5\u987b\u51c6\u786e,pay off \u7c7b\u77ed\u8bed\u52a8\u8bcd\u662f phrase \u4e0d\u662f sentence;word \u7684 inflections \u53ea\u5217\u4e0d\u89c4\u5219\u53d8\u5316,\u89c4\u5219\u7684\u8fd4\u56de [];\u6240\u6709\u4e2d\u6587\u5b57\u7b26\u95f4\u4e0d\u52a0\u7a7a\u683c\u3002`;
+要求:type 必须准确,pay off 类短语动词是 phrase 不是 sentence;word 的 inflections 只列不规则变化,规则的返回 [];所有中文字符间不加空格。`;
 }

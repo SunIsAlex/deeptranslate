@@ -6,7 +6,7 @@ import {
   stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache,
 } from "../_lib/translate-core.js";
 
-const SYSTEM = "\u4f60\u662f\u82f1\u8bed\u5b66\u4e60\u52a9\u624b\u3002\u4e25\u683c\u53ea\u8f93\u51fa json\uff0c\u4e0d\u8981\u4efb\u4f55\u989d\u5916\u6587\u5b57\u3001markdown \u6216\u4ee3\u7801\u5757\u3002\u5728 example \u4f8b\u53e5\u4e2d\uff0c\u628a\u76ee\u6807\u82f1\u6587\u8868\u8fbe\u7528 [[ ]] \u62ec\u8d77\u6765\uff0c\u53ea\u62ec\u82f1\u6587\u90e8\u5206\u3002";
+const SYSTEM = "你是英语学习助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 example 例句中，把目标英文表达用 [[ ]] 括起来，只括英文部分。";
 
 export async function onRequestPost(context) {
   try {
@@ -33,7 +33,7 @@ async function handle({ request, env }) {
   if (!text) return json({ error: "text_required" }, 400, CORS);
   if (text.length > 2000) return json({ error: "text_too_long" }, 400, CORS);
   // 中译英要求含中文
-  if (!/[\u4e00-\u9fa5]/.test(text)) return json({ error: "chinese_required", message: "\u8bf7\u8f93\u5165\u4e2d\u6587" }, 400, CORS);
+  if (!/[一-龥]/.test(text)) return json({ error: "chinese_required", message: "请输入中文" }, 400, CORS);
 
   // 中文无空格，无法用空格判词/句；用长度粗略分流（仅用于缓存键归类）
   const route = text.length <= 8 ? "word" : "sentence";
