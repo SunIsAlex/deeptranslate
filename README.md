@@ -1,153 +1,108 @@
-# 英语翻译与语法分析
+# DeepTranslate · 英语翻译与语法分析
 
-基于 DeepSeek 大模型的英语学习工具，部署在 EdgeOne Pages。输入单词返回构词分解、音标、例句；输入句子返回成分高亮和语法点分析。
+基于 DeepSeek 大模型、部署在 EdgeOne Pages 的英语学习工具。不只是翻译——输入英文给词根词缀、音标、词形变化、句法成分着色；输入中文给多个地道英文表达及用法区别。
+
+在线体验：https://deeptranslate.sunisalex.org
 
 ## 特性
 
-- 单词模式：词根词缀拆解、词性、音标、例句
-- 句子模式：成分着色、句法结构、语法点提示
-- 自动识别输入是单词还是句子
-- KV 缓存，重复查询毫秒级返回
-- 路径路由 `/w/:word` 和 `/s/:sentence`，可分享链接
-- 无鉴权，纯静态前端 + Edge Function 后端
+- **英译中**：自动识别输入是单词 / 短语动词 / 句子，分别给出对应分析
+  - 单词：释义、词性、音标、词根词缀拆解、不规则词形变化、例句
+  - 短语动词：整体含义、用法与可分性、例句（如 pay off）
+  - 句子：地道翻译、句法成分着色高亮、语法点提示
+- **中译英**：短语给 2-4 个备选表达及语域区别，句子给单一最地道译法
+- **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
+- **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
+- **KV 缓存**：重复查询毫秒级返回
+- **可分享链接**：`/w/单词`、`/p/词组`、`/s/句子`、`/zh/中文`，复制即分享
+- 无鉴权，即开即用
 
 ## 技术栈
 
-- 前端：原生 HTML/CSS/JS，无框架
+- 前端：原生 HTML / CSS / JS，无框架
 - 后端：EdgeOne Pages Edge Functions
 - 缓存：EdgeOne KV
-- 模型：DeepSeek（默认 `deepseek-chat`）
+- 模型：DeepSeek（默认 deepseek-chat，可配置 deepseek-v4-flash 等）
 
 ## 目录结构
 
 ```
 .
-├── index.html              # 主页
-├── app.js                  # 前端逻辑
-├── edgeone.json            # 路由配置
-├── edge-functions/
-│   └── api/
-│       └── translate.js    # 翻译接口
+├── index.html                 # 主页
+├── app.js                     # 前端逻辑（请求、渲染、路由、高亮）
+├── edgeone.json               # 路由 rewrite 配置
+└── edge-functions/
+    ├── _lib/
+    │   └── translate-core.js  # 公共工具：CORS、调模型、缓存、清洗
+    └── api/
+        ├── translate.js       # 英译中接口
+        └── translate-zh.js    # 中译英接口
 ```
 
 ## 本地开发
 
 ```bash
-npm install
+npm i -g edgeone
 edgeone login
-edgeone pages link           # 关联远程项目
-edgeone pages dev            # 本地启动
+edgeone pages init        # 第一次在仓库里初始化
+edgeone pages dev         # 本地起调试服务
 ```
 
-访问 `http://localhost:8088`。
-
-如果 link 后环境变量读不到，删掉本地 `.edgeone/` 目录重试。
+如果 link 后本地读不到环境变量，删掉 `.edgeone/` 目录重试（CLI 的本地状态缓存偶尔会失效）。
 
 ## 环境变量
 
 在 EdgeOne 控制台配置：
 
-| 变量 | 说明 | 默认值 |
+| 变量 | 说明 | 默认 |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | 必填 |
-| `DEEPSEEK_MODEL` | 模型名 | `deepseek-chat` |
-| `DEEPSEEK_API_URL` | API 地址 | `https://api.deepseek.com/chat/completions` |
+| `DEEPSEEK_API_KEY` | DeepSeek 密钥 | 必填 |
+| `DEEPSEEK_MODEL` | 模型名 | deepseek-chat |
+| `DEEPSEEK_API_URL` | API 地址 | https://api.deepseek.com/chat/completions |
 
-注意 EdgeOne 把环境变量注入为**全局变量**，不在 `context.env` 上。代码里用 `typeof DEEPSEEK_API_KEY !== "undefined" ? DEEPSEEK_API_KEY : ""` 访问。
-
-## KV 绑定
-
-控制台创建 KV 命名空间，绑定时变量名填 `KV`（与代码里的 `KV.get/put` 对应）。
+注意：EdgeOne 把环境变量注入为**全局变量**，不在 `context.env` 上；KV 命名空间同理，绑定时变量名填 `KV`。
 
 ## 接口
 
-`POST /api/translate`
+### POST /api/translate（英译中）
 
-请求：
 ```json
-{
-  "text": "unbelievable",
-  "mode": "auto"
-}
+{ "text": "unbelievable", "mode": "auto" }
 ```
 
-`mode` 可选值：`auto`（默认）、`word`、`sentence`。
+`mode` 可选 `auto`（默认）/ `word` / `sentence`。`auto` 时后端按词数和标点分流：单词走 word，明显句子走 sentence，2-4 词的模糊输入交给模型判断（含识别词组）。
 
-单词响应：
+返回 `type` 字段标明实际类型（word / phrase / sentence），前端据此渲染。
+
+### POST /api/translate-zh（中译英）
+
 ```json
-{
-  "type": "word",
-  "input": "unbelievable",
-  "translation": "难以置信的",
-  "analysis": {
-    "pos": "adj.",
-    "phonetic": "/ˌʌnbɪˈliːvəbl/",
-    "morphology": [
-      { "part": "un-", "kind": "prefix", "meaning": "不" },
-      { "part": "believ", "kind": "root", "meaning": "相信" },
-      { "part": "-able", "kind": "suffix", "meaning": "可…的" }
-    ],
-    "examples": ["..."]
-  },
-  "_cached": false
-}
+{ "text": "再接再厉" }
 ```
 
-句子响应：
-```json
-{
-  "type": "sentence",
-  "input": "The old man the ship.",
-  "translation": "老人们驾驶船只。",
-  "analysis": {
-    "structure": "主语 + 谓语 + 宾语",
-    "components": [
-      { "role": "主语", "text": "The old", "note": "..." },
-      { "role": "谓语", "text": "man", "note": "..." },
-      { "role": "宾语", "text": "the ship", "note": "..." }
-    ],
-    "grammar_points": ["..."]
-  },
-  "_cached": false
-}
-```
-
-错误响应：
-```json
-{ "error": "english_required", "message": "请输入英文" }
-```
-
-## 生产构建
-
-```bash
-node build.js
-```
-
-压缩根目录 `*.html` `*.css` `*.js`，输出到 `dist/`，edge-functions 直接复制。
-
-控制台部署时把构建命令设为 `node build.js`，输出目录设为 `dist`。
-
-## 缓存预热
-
-```bash
-# 词表每行一个单词
-API_URL=https://你的域名/api/translate node warmup.js wordlist.txt
-```
+返回 `direction: "zh2en"` + `translations` 数组（短语多条，句子单条）。
 
 ## 路由
 
 | 路径 | 行为 |
 |---|---|
 | `/` | 主页 |
-| `/w/:word` | 加载主页并自动查询单词 |
-| `/s/:sentence` | 加载主页并自动查询句子 |
-| `/api/translate` | 翻译接口 |
+| `/w/:word` | 自动查询单词 |
+| `/p/:phrase` | 自动查询词组 |
+| `/s/:sentence` | 自动查询句子 |
+| `/zh/:中文` | 中译英 |
+| `/api/translate` | 英译中接口 |
+| `/api/translate-zh` | 中译英接口 |
 
-## 已知问题
+所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。
 
-- DeepSeek 偶尔在词源字段编造历史细节，所以默认关闭了 etymology 字段输出
-- EdgeOne CLI link 后本地环境变量可能失效，删 `.edgeone/` 目录可恢复
-- 单一模型依赖，DeepSeek 服务不可用时整站失能
+## 已知问题与踩坑记录
+
+
+- **环境变量**：拼错变量名不会报错，会静默回退默认值——改动后务必确认实际生效的值。
+- **CLI 状态**：`edgeone pages link` 后本地环境变量可能失效，删 `.edgeone/` 目录可恢复。
+- **AI 可靠性**：词源类信息易被模型编造，已移除 etymology 字段；词形拆解、成分分析偶有小误，仅供学习参考。
+- **倒装句高亮**：含助动词分隔（do...hail）等不连续成分的句子，成分着色会降级为纯文本显示，成分说明列表仍正常。
 
 ## License
 
