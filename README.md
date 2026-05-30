@@ -29,7 +29,12 @@
 ```
 .
 ├── index.html                 # 主页
-├── app.js                     # 前端逻辑（请求、渲染、路由、高亮）
+├── app.js                     # 前端入口控制器（提交流程、加载日志、路由恢复、复制）
+├── js/
+│   ├── dom.js                 # DOM 元素引用与通用构建工具
+│   ├── highlight.js           # 例句 [[ ]] 高亮、句法成分着色
+│   ├── render.js              # 各类型结果渲染（word/phrase/sentence/zh）
+│   └── api.js                 # 翻译方向判断与后端请求
 ├── edgeone.json               # 路由 rewrite 配置
 └── edge-functions/
     ├── _lib/
