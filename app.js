@@ -262,43 +262,40 @@ function renderPhrase(data) {
   return frag;
 }
 
-// 中译英渲染：多个英文备选，每个含 用法区别 + 例句
 function renderZh(data) {
-  const { input, translations } = data;
+  const { input, type, translations } = data;
   const frag = document.createDocumentFragment();
-
   frag.appendChild(el("h3", "", input));
 
+  // 句子：单一译法，简洁显示，不重复
+  if (type === "sentence" && translations?.length) {
+    const t = translations[0];
+    const en = document.createElement("div");
+    en.className = "translation";
+    en.innerHTML = highlightExample(t.en || "");
+    frag.appendChild(en);
+    return frag;
+  }
+
+  // 词/短语：多备选
   if (translations?.length) {
     translations.forEach((t) => {
       const sec = document.createElement("section");
       sec.className = "zh-item";
-
-      // 英文表达（大字，[[ ]] 高亮）
       const en = document.createElement("div");
       en.className = "zh-en";
       en.innerHTML = highlightExample(t.en || "");
       sec.appendChild(en);
-
-      // 用法区别（可能为空）
-      if (t.note && t.note.trim()) {
-        sec.appendChild(el("div", "zh-note", t.note));
-      }
-
-      // 例句（[[ ]] 高亮）
+      if (t.note && t.note.trim()) sec.appendChild(el("div", "zh-note", t.note));
       if (t.example) {
         const ex = document.createElement("div");
         ex.className = "zh-example";
         ex.innerHTML = highlightExample(t.example);
         sec.appendChild(ex);
       }
-
       frag.appendChild(sec);
     });
-  } else {
-    frag.appendChild(el("div", "translation", "未获得翻译结果"));
   }
-
   return frag;
 }
 
