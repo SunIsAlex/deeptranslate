@@ -397,53 +397,54 @@ const ROLE_COLORS = {
  * @returns {HTMLElement} 一个包含高亮片段的 div
  */
 function renderHighlightedSentence(input, components) {
-  const wrap = document.createElement("div");
-  wrap.className = "highlight-sentence";
-
+  // 先尝试构建高亮片段，全程检测是否能严格顺序匹配
+  const segments = [];
   let cursor = 0;
+  let ok = true;
+
   for (const comp of components) {
-    // 在原句中定位 comp.text（从 cursor 开始找，避免重复词的误匹配）
     const idx = input.indexOf(comp.text, cursor);
     if (idx === -1) {
-      // 找不到（模型给出的片段与原句不完全一致），降级显示
-      const span = document.createElement("span");
-      span.className = "hl-fallback";
-      span.textContent = comp.text;
-      wrap.appendChild(span);
-      continue;
+      ok = false; // 有成分无法在剩余原句中按序定位 → 放弃高亮
+      break;
     }
-
-    // 把 cursor 到 idx 之间的部分作为普通文本插入
     if (idx > cursor) {
-      wrap.appendChild(document.createTextNode(input.slice(cursor, idx)));
+      segments.push({ type: "plain", text: input.slice(cursor, idx) });
     }
-
-    // 高亮片段
-    const span = document.createElement("span");
-    span.className = "hl-span";
-    span.style.background = ROLE_COLORS[comp.role] || "#f5f5f5";
-    span.textContent = comp.text;
-    span.dataset.role = comp.role;
-    if (comp.note) {
-      span.title = `${comp.role} · ${comp.note}`;
-    } else {
-      span.title = comp.role;
-    }
-    // 角色标签（小字上标）
-    const tag = document.createElement("sub");
-    tag.className = "hl-tag";
-    tag.textContent = comp.role;
-    span.appendChild(tag);
-    wrap.appendChild(span);
-
+    segments.push({ type: "mark", text: comp.text, role: comp.role, note: comp.note });
     cursor = idx + comp.text.length;
   }
 
-  // 剩余部分
+  const wrap = document.createElement("div");
+  wrap.className = "highlight-sentence";
+
+  if (!ok) {
+    // 降级：直接显示完整原句，不高亮（保证句子正确）
+    wrap.textContent = input;
+    return wrap;
+  }
+
+  // 正常：拼接高亮片段
+  for (const seg of segments) {
+    if (seg.type === "plain") {
+      wrap.appendChild(document.createTextNode(seg.text));
+    } else {
+      const span = document.createElement("span");
+      span.className = "hl-span";
+      span.style.background = ROLE_COLORS[seg.role] || "#f5f5f5";
+      span.textContent = seg.text;
+      span.title = seg.note ? `${seg.role} · ${seg.note}` : seg.role;
+      const tag = document.createElement("sub");
+      tag.className = "hl-tag";
+      tag.textContent = seg.role;
+      span.appendChild(tag);
+      wrap.appendChild(span);
+    }
+  }
+  // 补上尾部
   if (cursor < input.length) {
     wrap.appendChild(document.createTextNode(input.slice(cursor)));
   }
-
   return wrap;
 }
 
