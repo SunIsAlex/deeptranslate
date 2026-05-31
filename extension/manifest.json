@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "DeepTranslate 划词翻译",
+  "version": "1.0.0",
+  "description": "选中英文按 F2，弹出 tooltip 显示 DeepTranslate 的释义 / 词根词缀 / 句法分析。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.sunisalex.org/*",
+    "http://localhost:8088/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "DeepTranslate 设置",
+    "default_popup": "options.html"
+  }
+}
