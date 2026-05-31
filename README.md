@@ -22,7 +22,7 @@
 
 点工具栏上的插件图标，可配置：
 
-- **API 接口地址**：默认 `https://deeptranslate.sunisalex.org/api/translate`。
+- **API 接口地址**：默认 `https://api.sunisalex.org/api/translate`。
   改成自建地址后，需在 `manifest.json` 的 `host_permissions` 里加上对应域名。
 - **触发快捷键**：默认 `F2`，点输入框后按想用的键即可。
 
