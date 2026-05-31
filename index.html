@@ -322,5 +322,31 @@
     
   </main>
   <script type="module" src="/app.js"></script>
+  <script>
+(function () {
+  function sendTitle() {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'setTitle', title: document.title }, '*');
+    }
+  }
+
+  // 页面加载完发一次
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sendTitle);
+  } else {
+    sendTitle();
+  }
+
+  // 监听 title 动态变化（SPA 路由切换等场景）
+  var observer = new MutationObserver(function () {
+    sendTitle();
+  });
+  observer.observe(document.querySelector('title') || document.head, {
+    subtree: true,
+    characterData: true,
+    childList: true
+  });
+})();
+</script>
 </body>
 </html>
