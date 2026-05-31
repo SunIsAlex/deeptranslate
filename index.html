@@ -324,27 +324,57 @@
   <script type="module" src="/app.js"></script>
   <script>
 (function () {
+  function findFaviconUrl() {
+    var link = document.querySelector(
+      'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'
+    );
+    if (link && link.href) return link.href;
+    return location.origin + '/favicon.ico';
+  }
+
   function sendTitle() {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'setTitle', title: document.title }, '*');
-    }
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'setHead', title: document.title }, '*');
   }
 
-  // 页面加载完发一次
+  function sendFavicon() {
+    if (window.parent === window) return;
+    var url = findFaviconUrl();
+
+    // 用 fetch 取回图片（同源，自动带 cookie / 鉴权态），转 base64
+    fetch(url, { credentials: 'include' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('favicon ' + r.status);
+        return r.blob();
+      })
+      .then(function (blob) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          window.parent.postMessage({
+            type: 'setHead',
+            favicon: reader.result   // data:image/...;base64,xxxx
+          }, '*');
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch(function () { /* 取不到就算了，父页面保留默认图标 */ });
+  }
+
+  function init() {
+    sendTitle();
+    sendFavicon();
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', sendTitle);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    sendTitle();
+    init();
   }
 
-  // 监听 title 动态变化（SPA 路由切换等场景）
-  var observer = new MutationObserver(function () {
-    sendTitle();
-  });
-  observer.observe(document.querySelector('title') || document.head, {
-    subtree: true,
-    characterData: true,
-    childList: true
+  // 标题变化实时同步（favicon 一般不变，无需频繁重传）
+  var observer = new MutationObserver(sendTitle);
+  observer.observe(document.head, {
+    subtree: true, characterData: true, childList: true
   });
 })();
 </script>
