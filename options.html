@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", sans-serif; width: 300px; padding: 14px; color: #1f2329; }
+    h1 { font-size: 15px; margin: 0 0 10px; }
+    label { display: block; margin: 10px 0 4px; font-size: 13px; color: #5b6b7c; }
+    input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 13px; }
+    .hint { font-size: 12px; color: #98a2b3; margin-top: 4px; }
+    button { margin-top: 12px; padding: 7px 14px; border: none; border-radius: 6px; background: #1a73e8; color: #fff; cursor: pointer; font-size: 13px; }
+    button:hover { background: #1665d8; }
+    #saved { color: #12b76a; font-size: 12px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <h1>DeepTranslate 划词翻译</h1>
+  <label for="endpoint">API 接口地址</label>
+  <input id="endpoint" type="text" placeholder="https://deeptranslate.sunisalex.org/api/translate" />
+  <div class="hint">改了自建地址需在 manifest 的 host_permissions 里加上对应域名。</div>
+
+  <label for="hotkey">触发快捷键</label>
+  <input id="hotkey" type="text" placeholder="F2" />
+  <div class="hint">选中英文后按此键翻译。点输入框后按一下想用的键自动填入。</div>
+
+  <button id="save">保存</button><span id="saved"></span>
+
+  <script src="options.js"></script>
+</body>
+</html>
