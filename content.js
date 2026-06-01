@@ -17,27 +17,32 @@
   let lastReqId = 0;
 
   document.addEventListener(
-    "keydown",
-    (e) => {
-      if (e.key !== hotkey) return;
-      // 避免在输入框里抢键
-      const tag = (e.target?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) {
-        // 输入框内仍允许：用选中的文本翻译
-      }
-      const sel = window.getSelection();
-      const text = (sel?.toString() || "").trim();
-      if (!text) return;
+  "keydown",
+  (e) => {
+    if (e.key !== hotkey) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+    const sel = window.getSelection();
+    let text = (sel?.toString() || "").trim();
+    if (!text) return;
 
-      const rect = getSelectionRect(sel);
-      translateAndShow(text, rect);
-    },
-    true
-  );
+    // 需求1：单个词的部分选中 → 扩展到完整单词
+    // 条件：选中内容不含空格（是某个词的片段），尝试补全
+    if (!/\s/.test(text)) {
+      const expanded = expandToFullWord(sel);
+      if (expanded) text = expanded;
+    }
 
+    // 需求2：不含英文字母 → 不翻译（纯中文/数字/符号）
+    if (!/[a-zA-Z]/.test(text)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = getSelectionRect(sel);
+    translateAndShow(text, rect);
+  },
+  true
+);
   // 点击其它地方 / Esc / 滚动 → 关闭
   document.addEventListener("mousedown", (e) => {
     if (host && !host.contains(e.target)) removeTooltip();
@@ -453,4 +458,45 @@
     .dt-error-msg { color: #5b6b7c; margin-top: 2px; word-break: break-all; }
     .dt-raw { white-space: pre-wrap; word-break: break-all; font-size: 12px; background: #f7f8fa; border-radius: 6px; padding: 8px; margin-top: 6px; }
   `;
+  // 若选区落在单个英文单词内部/部分，扩展到完整单词
+// 返回扩展后的完整单词；无法扩展时返回 null
+function expandToFullWord(sel) {
+  try {
+    const range = sel.getRangeAt(0);
+    const startNode = range.startContainer;
+    const endNode = range.endContainer;
+
+    // 只处理选区起止在同一个文本节点内的情况
+    // （跨节点说明选了复杂内容，不补全）
+    if (
+      startNode.nodeType !== Node.TEXT_NODE ||
+      startNode !== endNode
+    ) {
+      return null;
+    }
+
+    const fullText = startNode.textContent;
+    let start = range.startOffset;
+    let end = range.endOffset;
+
+    // 单词字符：字母、连字符（处理 well-known 这类）、撇号（don't）
+    const isWordChar = (ch) => /[a-zA-Z'-]/.test(ch);
+
+    // 选中内容本身必须含字母，否则不是在选词
+    if (!/[a-zA-Z]/.test(fullText.slice(start, end))) return null;
+
+    // 向左扩展
+    while (start > 0 && isWordChar(fullText[start - 1])) start--;
+    // 向右扩展
+    while (end < fullText.length && isWordChar(fullText[end])) end++;
+
+    const word = fullText.slice(start, end).trim();
+    // 去掉首尾可能扩进来的连字符/撇号
+    const cleaned = word.replace(/^[-']+|[-']+$/g, "");
+
+    return cleaned || null;
+  } catch {
+    return null;
+  }
+}
 })();
