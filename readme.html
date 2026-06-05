@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="/favicon.ico">
+<title>README · 英语翻译与语法分析</title>
+<style>
+  :root {
+    --blue: #1a73e8;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --bg: #fff;
+    --bg-soft: #f8f9fa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+  }
+  header a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  header a:hover { color: var(--blue); }
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+  .markdown h1 { font-size: 28px; font-weight: 600; margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .markdown h2 { font-size: 22px; font-weight: 600; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .markdown h3 { font-size: 18px; font-weight: 600; margin: 24px 0 10px; }
+  .markdown h4 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+  .markdown p { margin: 0 0 14px; }
+  .markdown a { color: var(--blue); text-decoration: none; }
+  .markdown a:hover { text-decoration: underline; }
+  .markdown ul, .markdown ol { margin: 0 0 14px; padding-left: 24px; }
+  .markdown li { margin: 4px 0; }
+  .markdown code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--bg-soft);
+    padding: 2px 5px;
+    border-radius: 4px;
+  }
+  .markdown pre {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 16px;
+  }
+  .markdown pre code { background: transparent; padding: 0; font-size: 13px; line-height: 1.6; }
+  .markdown table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 16px;
+    font-size: 14px;
+  }
+  .markdown th, .markdown td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .markdown th { background: var(--bg-soft); font-weight: 600; }
+  .markdown blockquote {
+    margin: 0 0 16px;
+    padding: 0 16px;
+    color: var(--text-secondary);
+    border-left: 4px solid var(--border);
+  }
+  .markdown hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .loading { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+  <header>
+    <a href="/">← 返回</a>
+  </header>
+  <main>
+    <article class="markdown" id="content">
+      <p class="loading">加载中…</p>
+    </article>
+  </main>
+  <script src="/js/marked.min.js"></script>
+  <script>
+    fetch('/README.md')
+      .then(function (r) {
+        if (!r.ok) throw new Error('README ' + r.status);
+        return r.text();
+      })
+      .then(function (md) {
+        marked.setOptions({ gfm: true, breaks: false });
+        document.getElementById('content').innerHTML = marked.parse(md);
+        document.title = 'README · 英语翻译与语法分析';
+      })
+      .catch(function (err) {
+        document.getElementById('content').innerHTML =
+          '<p>无法加载 README：' + err.message + '</p>';
+      });
+  </script>
+</body>
+</html>

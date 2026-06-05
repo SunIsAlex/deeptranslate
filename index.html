@@ -28,6 +28,9 @@
   header {
     border-bottom: 1px solid var(--border);
     padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
   header h1 {
     margin: 0;
@@ -36,6 +39,49 @@
     color: var(--text-secondary);
   }
   header h1 b { color: var(--text); font-weight: 500; }
+
+  /* 右上角下拉菜单 */
+  .menu { position: relative; }
+  .menu-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 400;
+    cursor: pointer;
+    letter-spacing: normal;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .menu-btn:hover { background: var(--bg-soft); }
+  .menu-btn .caret { font-size: 10px; transition: transform 0.15s; }
+  .menu.open .menu-btn .caret { transform: rotate(180deg); }
+  .menu-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+    padding: 6px 0;
+    z-index: 100;
+    display: none;
+  }
+  .menu.open .menu-list { display: block; }
+  .menu-list a {
+    display: block;
+    padding: 8px 16px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .menu-list a:hover { background: var(--bg-soft); }
   main {
     max-width: 1200px;
     margin: 0 auto;
@@ -291,6 +337,15 @@
 <body>
   <header>
     <h1><b>英语翻译</b> 与语法分析</h1>
+    <div class="menu" id="menu">
+      <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false">
+        菜单 <span class="caret">▾</span>
+      </button>
+      <div class="menu-list" role="menu">
+        <a href="/README.md" target="_blank" rel="noopener" role="menuitem">README</a>
+        <a href="/files/deeptranslate-extension-v1.1.0.zip" role="menuitem" download>下载浏览器插件</a>
+      </div>
+    </div>
   </header>
   <main>
     <div class="panels">
@@ -322,6 +377,33 @@
     
   </main>
   <script type="module" src="/app.js"></script>
+  <script>
+(function () {
+  var menu = document.getElementById('menu');
+  var btn = document.getElementById('menu-btn');
+  if (!menu || !btn) return;
+
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // 点击页面其它地方关闭菜单
+  document.addEventListener('click', function () {
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+
+  // Esc 关闭
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      menu.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+})();
+</script>
   <script>
 (function () {
   function findFaviconUrl() {
