@@ -44,26 +44,31 @@
   .menu { position: relative; }
   .menu-btn {
     background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
+    border: none;
     border-radius: 4px;
-    padding: 6px 12px;
-    font-size: 14px;
-    font-weight: 400;
+    padding: 6px;
     cursor: pointer;
     letter-spacing: normal;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 32px;
+    height: 32px;
   }
   .menu-btn:hover { background: var(--bg-soft); }
-  .menu-btn .caret { font-size: 10px; transition: transform 0.15s; }
-  .menu.open .menu-btn .caret { transform: rotate(180deg); }
+  .menu-btn span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--text-secondary);
+    border-radius: 2px;
+  }
   .menu-list {
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
-    min-width: 200px;
+    min-width: 130px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -338,12 +343,12 @@
   <header>
     <h1><b>英语翻译</b> 与语法分析</h1>
     <div class="menu" id="menu">
-      <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false">
-        菜单 <span class="caret">▾</span>
+      <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="菜单">
+        <span></span><span></span><span></span>
       </button>
       <div class="menu-list" role="menu">
-        <a href="/README.md" target="_blank" rel="noopener" role="menuitem">README</a>
-        <a href="/files/deeptranslate-extension-v1.1.0.zip" role="menuitem" download>下载浏览器插件</a>
+        <a href="/readme.html" role="menuitem">说明</a>
+        <a href="/files/deeptranslate-extension-v1.1.0.zip" role="menuitem" download>插件</a>
       </div>
     </div>
   </header>
