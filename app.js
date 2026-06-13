@@ -21,9 +21,7 @@ function setStatus(msg) {
 function truncate(s, n) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+
 
 // ── 提交流程 ───────────────────────────────────
 async function handleSubmit() {
@@ -54,8 +52,7 @@ async function handleSubmit() {
     setStage(`> type: ${typeLabel}  |  cached: ${data._cached ? "HIT" : "MISS"}  |  ${total}ms`);
     setStage(`> rendering…`);
 
-    // 短暂停顿让用户看清最后一行,再渲染结果
-    await sleep(1000);
+
 
     setStatus(data._cached ? "缓存" : "");
     copyBtn.hidden = false;
