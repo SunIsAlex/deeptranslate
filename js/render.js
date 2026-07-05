@@ -15,12 +15,12 @@ export function render(data) {
   outputEl.appendChild(wrap);
 }
 
-// SSE 过程中只展示已经完整生成的译文和例句，最终结果会由 render 替换。
-export function renderStreaming({ input, translation, examples }) {
+// SSE 过程中按义项、英文解释、例句的顺序展示完整内容，最终由 render 替换。
+export function renderStreaming({ input, translation, senses, examples }) {
   const wrap = document.createElement("div");
   wrap.className = "result streaming-result";
   wrap.appendChild(el("h3", "", input));
-  if (translation) wrap.appendChild(el("div", "translation", translation));
+  if (translation) wrap.appendChild(renderSenses(senses, translation));
 
   const completedExamples = (examples || []).filter(Boolean);
   if (completedExamples.length) {

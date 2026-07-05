@@ -125,8 +125,9 @@ async function pumpModelStream({
   let lineBuffer = "";
   let content = "";
   let sentTranslation = false;
+  let sentSenses = false;
   let sentExamples = 0;
-  let cacheWrite;
+  let pendingExamples = [];
 
   const send = (event, data) =>
     writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
@@ -164,11 +165,24 @@ async function pumpModelStream({
           }
         }
 
-        const examples = extractStringArray(content, "examples");
-        while (sentExamples < examples.length) {
+        if (!sentSenses) {
+          const senses = extractJsonProperty(content, "senses");
+          if (Array.isArray(senses)) {
+            sentSenses = true;
+            await send("senses", { items: cleanCJKSpaces(senses) });
+          }
+        }
+
+        pendingExamples = extractStringArray(content, "examples");
+        const streamedType = route === "auto"
+          ? extractStringProperty(content, "type")
+          : route;
+        const maySendExamples = streamedType === "sentence"
+          || ((streamedType === "word" || streamedType === "phrase") && sentSenses);
+        while (maySendExamples && sentExamples < pendingExamples.length) {
           await send("example", {
             index: sentExamples,
-            text: cleanCJKSpaces(examples[sentExamples]),
+            text: cleanCJKSpaces(pendingExamples[sentExamples]),
           });
           sentExamples += 1;
         }
@@ -198,6 +212,10 @@ async function pumpModelStream({
     if (!sentTranslation && result.translation) {
       await send("translation", { text: result.translation });
     }
+    if (!sentSenses && Array.isArray(result.senses)) {
+      sentSenses = true;
+      await send("senses", { items: result.senses });
+    }
     const finalExamples = result.analysis?.examples || [];
     while (sentExamples < finalExamples.length) {
       await send("example", { index: sentExamples, text: finalExamples[sentExamples] });
@@ -205,8 +223,8 @@ async function pumpModelStream({
     }
 
     await send("result", result);
-    await send("done", {});
-    cacheWrite = writeEdgeCache(
+    // 保持连接打开直到缓存落盘，避免响应结束后运行时提前回收。
+    await writeEdgeCache(
       requestUrl,
       text,
       route,
@@ -215,6 +233,7 @@ async function pumpModelStream({
       result,
       apiKey,
     );
+    await send("done", {});
   } catch (error) {
     if (error?.name !== "AbortError") {
       try {
@@ -229,7 +248,6 @@ async function pumpModelStream({
     } catch {
       // 流已被取消。
     }
-    if (cacheWrite) await cacheWrite;
   }
 }
 
@@ -252,6 +270,7 @@ function createCachedStream(cached, text, route, model, grammarAnalysis) {
       };
       send("meta", { route, model, grammarAnalysis, cached: true });
       if (result.translation) send("translation", { text: result.translation });
+      if (Array.isArray(result.senses)) send("senses", { items: result.senses });
       (result.analysis?.examples || []).forEach((example, index) => {
         send("example", { index, text: example });
       });
@@ -294,7 +313,7 @@ async function writeEdgeCache(
   apiKey,
 ) {
   try {
-    await fetch(new URL("/api/translate-cache", requestUrl), {
+    const response = await fetch(new URL("/api/translate-cache", requestUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -309,6 +328,10 @@ async function writeEdgeCache(
         result,
       }),
     });
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error(`stream cache write failed: ${response.status} ${detail}`);
+    }
   } catch (error) {
     console.error("stream cache write failed:", error);
   }
@@ -370,6 +393,47 @@ function extractStringArray(source, key) {
     cursor = parsed.end;
   }
   return values;
+}
+
+function extractJsonProperty(source, key) {
+  const valueStart = findPropertyValue(source, key);
+  if (valueStart < 0) return null;
+  const opening = source[valueStart];
+  if (opening !== "[" && opening !== "{") return null;
+
+  const stack = [opening];
+  let inString = false;
+  let escaped = false;
+  for (let cursor = valueStart + 1; cursor < source.length; cursor += 1) {
+    const char = source[cursor];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "[" || char === "{") {
+      stack.push(char);
+    } else if (char === "]" || char === "}") {
+      const expected = char === "]" ? "[" : "{";
+      if (stack.pop() !== expected) return null;
+      if (!stack.length) {
+        try {
+          return JSON.parse(source.slice(valueStart, cursor + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function findPropertyValue(source, key) {

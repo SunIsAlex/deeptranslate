@@ -49,15 +49,21 @@ async function handleSubmit() {
   setStage(`> model: ${settings.model}  |  grammar: ${settings.grammarAnalysis ? "ON" : "OFF"}`);
 
   try {
-    const partial = { input: text, translation: "", examples: [] };
+    const partial = { input: text, translation: "", senses: [], examples: [] };
     const onStreamEvent = (event, data) => {
       if (event === "translation") {
         partial.translation = data.text || "";
         renderStreaming(partial);
         setStatus("生成中…");
+      } else if (event === "senses" && Array.isArray(data.items)) {
+        partial.senses = data.items;
+        renderStreaming(partial);
       } else if (event === "example" && data.text) {
         partial.examples[data.index ?? partial.examples.length] = data.text;
         renderStreaming(partial);
+      } else if (event === "result") {
+        render(data);
+        setStatus(data._cached ? "缓存" : "");
       }
     };
     const { res, data, total } = await translate(

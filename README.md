@@ -106,8 +106,8 @@ edgeone pages dev         # 本地起调试服务
 ### POST /api/translate-stream（英译中流式）
 
 请求体与 `/api/translate` 相同，响应类型为 `text/event-stream`。依次发送 `meta`、
-`translation`、零到多个 `example`、`result` 和 `done` 事件。`translation` 与每个
-`example` 都在字符串完整生成后发送；`result` 携带与非流式接口兼容的完整 JSON。
+`translation`、可选的 `senses`、零到多个 `example`、`result` 和 `done` 事件。
+单词和词组会先发送完整义项及英文解释，再逐条发送例句；`result` 携带与非流式接口兼容的完整 JSON。
 
 流式接口运行在 Node Function 中。由于 EdgeOne KV 仅支持 Edge Functions，它通过
 `/api/translate-cache` 读取和回写原有缓存；缓存写入要求服务端密钥，浏览器不能写入。
