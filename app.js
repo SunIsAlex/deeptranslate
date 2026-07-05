@@ -2,9 +2,14 @@
 import {
   inputEl, modeEl, grammarAnalysisEl, modelEl,
   submitBtn, statusEl, outputEl, copyBtn,
+  followUpEl, followUpThreadEl, followUpInputEl, followUpBtn,
 } from "./js/dom.js";
-import { detectDirection, translate } from "./js/api.js";
+import { askFollowUp, detectDirection, translate } from "./js/api.js";
 import { render, renderStreaming } from "./js/render.js";
+
+let currentTranslation = null;
+let followUpHistory = [];
+let followUpController = null;
 
 // ── 加载日志与状态 ──────────────────────────────
 function setStage(line) {
@@ -25,6 +30,41 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
+function resetFollowUp() {
+  followUpController?.abort();
+  followUpController = null;
+  currentTranslation = null;
+  followUpHistory = [];
+  followUpThreadEl.innerHTML = "";
+  followUpInputEl.value = "";
+  followUpEl.hidden = true;
+  followUpBtn.disabled = false;
+  followUpInputEl.disabled = false;
+}
+
+function followUpContext(data) {
+  const {
+    direction, input, type, translation,
+    senses, analysis, translations,
+  } = data;
+  return {
+    direction,
+    input,
+    type,
+    translation,
+    senses,
+    analysis,
+    translations,
+  };
+}
+
+function appendFollowUpMessage(role, text = "") {
+  const message = document.createElement("div");
+  message.className = `follow-up-message follow-up-${role}`;
+  message.textContent = text;
+  followUpThreadEl.appendChild(message);
+  return message;
+}
 
 // ── 提交流程 ───────────────────────────────────
 async function handleSubmit() {
@@ -35,6 +75,7 @@ async function handleSubmit() {
   }
 
   outputEl.innerHTML = "";
+  resetFollowUp();
   submitBtn.disabled = true;
   copyBtn.hidden = true;
   setStatus("");
@@ -64,6 +105,8 @@ async function handleSubmit() {
       } else if (event === "result") {
         render(data);
         setStatus(data._cached ? "缓存" : "");
+        currentTranslation = followUpContext(data);
+        followUpEl.hidden = false;
       }
     };
     const { res, data, total } = await translate(
@@ -88,12 +131,61 @@ async function handleSubmit() {
     setStatus(data._cached ? "缓存" : "");
     copyBtn.hidden = false;
     render(data);
+    currentTranslation = followUpContext(data);
+    followUpEl.hidden = false;
     updateUrl(data, text);
   } catch (err) {
     setStage(`> ERROR: ${err.message}`);
     setStatus(`网络错误：${err.message}`);
   } finally {
     submitBtn.disabled = false;
+  }
+}
+
+async function handleFollowUp() {
+  const question = followUpInputEl.value.trim();
+  if (!question || !currentTranslation || followUpController) return;
+
+  appendFollowUpMessage("user", question);
+  const answerEl = appendFollowUpMessage("assistant");
+  answerEl.classList.add("streaming");
+  followUpInputEl.value = "";
+  followUpInputEl.disabled = true;
+  followUpBtn.disabled = true;
+  followUpBtn.textContent = "回答中…";
+
+  const controller = new AbortController();
+  followUpController = controller;
+  let streamedAnswer = "";
+
+  try {
+    const answer = await askFollowUp({
+      question,
+      context: currentTranslation,
+      history: followUpHistory.slice(-8),
+      model: modelEl.value,
+      signal: controller.signal,
+      onDelta(delta) {
+        streamedAnswer += delta;
+        answerEl.textContent = streamedAnswer;
+      },
+    });
+    answerEl.textContent = answer;
+    followUpHistory.push({ question, answer });
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      answerEl.textContent = `回答失败：${error.message}`;
+      answerEl.classList.add("follow-up-error");
+    }
+  } finally {
+    answerEl.classList.remove("streaming");
+    if (followUpController === controller) {
+      followUpController = null;
+      followUpInputEl.disabled = false;
+      followUpBtn.disabled = false;
+      followUpBtn.textContent = "提问";
+      followUpInputEl.focus();
+    }
   }
 }
 
@@ -110,11 +202,19 @@ function updateUrl(data, text) {
 
 // ── 事件绑定 ───────────────────────────────────
 submitBtn.addEventListener("click", handleSubmit);
+followUpBtn.addEventListener("click", handleFollowUp);
 
 inputEl.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
     e.preventDefault();
     handleSubmit();
+  }
+});
+
+followUpInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    handleFollowUp();
   }
 });
 

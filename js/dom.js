@@ -8,6 +8,10 @@ export const submitBtn = document.getElementById("submit-btn");
 export const statusEl = document.getElementById("status");
 export const outputEl = document.getElementById("output");
 export const copyBtn = document.getElementById("copy-btn");
+export const followUpEl = document.getElementById("follow-up");
+export const followUpThreadEl = document.getElementById("follow-up-thread");
+export const followUpInputEl = document.getElementById("follow-up-input");
+export const followUpBtn = document.getElementById("follow-up-btn");
 
 // 转义,防 XSS(因为高亮要用 innerHTML)
 export function escapeHtml(s) {

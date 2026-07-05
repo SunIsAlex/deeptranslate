@@ -187,6 +187,65 @@
     justify-content: flex-end;
     margin-top: 16px;
   }
+  .follow-up {
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: var(--bg);
+  }
+  .follow-up[hidden] { display: none; }
+  .follow-up-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .follow-up-thread:empty { display: none; }
+  .follow-up-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .follow-up-message {
+    max-width: 88%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .follow-up-user {
+    align-self: flex-end;
+    color: #174ea6;
+    background: #e8f0fe;
+  }
+  .follow-up-assistant {
+    align-self: flex-start;
+    background: var(--bg-soft);
+  }
+  .follow-up-assistant.streaming::after {
+    content: "▋";
+    color: var(--blue);
+    animation: blink 1s steps(2) infinite;
+  }
+  .follow-up-error { color: #b3261e; }
+  .follow-up-compose {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+  }
+  textarea.follow-up-input {
+    min-height: 42px;
+    max-height: 140px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  textarea.follow-up-input:focus { border-color: var(--blue); }
+  .follow-up-btn { flex: 0 0 auto; }
   button {
     background: var(--blue);
     color: #fff;
@@ -335,6 +394,8 @@
     main { padding: 12px; }
     .source-options { gap: 0; }
     .check-option, select { font-size: 12px; padding-inline: 4px; }
+    .follow-up { padding: 14px; }
+    .follow-up-message { max-width: 96%; }
   }
   .icon-btn {
   background: transparent;
@@ -445,6 +506,21 @@
     <div class="actions">
       <button id="submit-btn">翻译</button>
     </div>
+    <section class="follow-up" id="follow-up" aria-labelledby="follow-up-title" hidden>
+      <h2 class="follow-up-title" id="follow-up-title">追问当前翻译</h2>
+      <div class="follow-up-thread" id="follow-up-thread" aria-live="polite"></div>
+      <div class="follow-up-compose">
+        <textarea
+          class="follow-up-input"
+          id="follow-up-input"
+          rows="2"
+          maxlength="1000"
+          placeholder="例如：这种用法是否正确？"
+          aria-label="追问内容"
+        ></textarea>
+        <button class="follow-up-btn" id="follow-up-btn">提问</button>
+      </div>
+    </section>
     
   </main>
   <script type="module" src="/app.js"></script>

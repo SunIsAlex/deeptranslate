@@ -86,13 +86,84 @@ async function translateStream(text, mode, settings, onStage, onEvent) {
   }
 
   onStage("> streaming SSE…");
+  let finalData = null;
+  let streamError = null;
+
+  await readEventStream(res, (event, data) => {
+    if (event === "result") finalData = data;
+    if (event === "error") streamError = new Error(data.detail || data.error || "stream_failed");
+    onEvent?.(event, data);
+  });
+
+  if (streamError) throw streamError;
+  if (!finalData) throw new Error("stream ended without a result");
+
+  return {
+    res,
+    data: finalData,
+    direction: "en2zh",
+    total: Math.round(performance.now() - t0),
+  };
+}
+
+/**
+ * 基于当前翻译结果流式回答追问。
+ * @returns {Promise<string>} 完整回答
+ */
+export async function askFollowUp({
+  question,
+  context,
+  history = [],
+  model,
+  onDelta,
+  signal,
+}) {
+  const res = await fetch("/api/follow-up", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "text/event-stream",
+    },
+    body: JSON.stringify({ question, context, history, model }),
+    signal,
+  });
+
+  const contentType = res.headers.get("Content-Type") || "";
+  if (!res.ok || !contentType.includes("text/event-stream") || !res.body) {
+    let detail = `追问请求失败 ${res.status}`;
+    try {
+      const data = await res.json();
+      detail = data.message || data.detail || data.error || detail;
+    } catch {
+      // 非 JSON 错误响应。
+    }
+    throw new Error(detail);
+  }
+
+  let answer = "";
+  let streamError = null;
+  await readEventStream(res, (event, data) => {
+    if (event === "delta" && data.text) {
+      answer += data.text;
+      onDelta?.(data.text);
+    } else if (event === "result" && data.answer) {
+      answer = data.answer;
+    } else if (event === "error") {
+      streamError = new Error(data.detail || data.error || "stream_failed");
+    }
+  });
+
+  if (streamError) throw streamError;
+  if (!answer.trim()) throw new Error("回答为空");
+  return answer;
+}
+
+async function readEventStream(res, onEvent) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "message";
   let dataLines = [];
-  let finalData = null;
-  let streamError = null;
 
   const dispatch = () => {
     if (!dataLines.length) {
@@ -110,9 +181,7 @@ async function translateStream(text, mode, settings, onStage, onEvent) {
     }
     const event = currentEvent;
     currentEvent = "message";
-    if (event === "result") finalData = data;
-    if (event === "error") streamError = new Error(data.detail || data.error || "stream_failed");
-    onEvent?.(event, data);
+    onEvent(event, data);
   };
 
   while (true) {
@@ -138,14 +207,4 @@ async function translateStream(text, mode, settings, onStage, onEvent) {
       break;
     }
   }
-
-  if (streamError) throw streamError;
-  if (!finalData) throw new Error("stream ended without a result");
-
-  return {
-    res,
-    data: finalData,
-    direction: "en2zh",
-    total: Math.round(performance.now() - t0),
-  };
 }

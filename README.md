@@ -14,6 +14,7 @@
 - **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
+- **上下文追问**：基于当前翻译结果继续询问用法、语法和自然度，AI 以用户提问所用语言流式回答
 - **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
 - **KV 缓存**：重复查询毫秒级返回
 - **可分享链接**：`/w/单词`、`/p/词组`、`/s/句子`、`/zh/中文`，复制即分享
@@ -47,7 +48,8 @@
         └── translate-zh.js    # 中译英接口
 └── node-functions/
     └── api/
-        └── translate-stream.js # 英译中 SSE 流式接口
+        ├── translate-stream.js # 英译中 SSE 流式接口
+        └── follow-up.js        # 基于翻译上下文的流式追问接口
 ```
 
 ## 本地开发
@@ -112,6 +114,20 @@ edgeone pages dev         # 本地起调试服务
 流式接口运行在 Node Function 中。由于 EdgeOne KV 仅支持 Edge Functions，它通过
 `/api/translate-cache` 读取和回写原有缓存；缓存写入要求服务端密钥，浏览器不能写入。
 
+### POST /api/follow-up（上下文追问）
+
+```json
+{
+  "question": "这里可以用 pay off 吗？",
+  "context": { "input": "……", "translation": "……", "analysis": {} },
+  "history": [],
+  "model": "deepseek-v4-flash"
+}
+```
+
+响应类型为 `text/event-stream`，依次发送 `meta`、多个 `delta`、`result` 和 `done`。
+回答会参考当前完整翻译结果，并使用与当前问题相同的语言。前端开始新翻译时会清空追问记录。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -123,6 +139,7 @@ edgeone pages dev         # 本地起调试服务
 | `/zh/:中文` | 中译英 |
 | `/api/translate` | 英译中接口 |
 | `/api/translate-stream` | 英译中 SSE 流式接口 |
+| `/api/follow-up` | 基于当前翻译结果的流式追问接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。
