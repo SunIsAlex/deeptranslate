@@ -89,6 +89,9 @@ function wordPrompt(word) {
   return `分析英文单词："${word}"。只输出 json：
 {
   "translation": "中文释义,多义用 / 分隔,最多 3 个义项",
+  "senses": [
+    { "zh": "该义项的简洁中文释义", "definition": "A concise English definition of this sense." }
+  ],
   "analysis": {
     "pos": "词性,如 n./v./adj./abbr.",
     "phonetic": "音标,带 / /",
@@ -99,6 +102,8 @@ function wordPrompt(word) {
   }
 }
 要求:
+- senses 按常用度列出最多 3 个义项；每个 zh 与 translation 中对应义项一致，translation 等于所有 zh 用 " / " 连接
+- definition 必须使用简洁自然的英文解释对应义项，不能只是英文同义词或中文释义的重复，且每项不超过 25 个英文单词
 - inflections 只列不规则或值得注意的曲折变化(如 say→said、child→children、good→better/best);规则变化(直接加 -s/-ed/-ing)或无变化的词返回 []
 - morphology 按词中顺序排列;接后缀有拼写变化时 part 用实际形式(如 unbelievable → un-/believ/-able);combining_form 用于希腊/拉丁实义成分(arthro-/-pod/bio-)
 - 若输入是首字母缩略词(initialism,如 NATO/FBI):fullForm 给完整展开式,morphology 每个字母一条、kind 用 abbr、meaning 是该字母对应的英文单词(如 N→North)
@@ -133,13 +138,19 @@ function autoPrompt(text) {
 只输出 json。
 
 word:
-{ "type":"word", "translation":"释义,/分隔最多3个", "analysis":{ "pos":"词性", "phonetic":"音标带//", "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
+{ "type":"word", "translation":"释义,/分隔最多3个", "senses":[{"zh":"中文义项","definition":"Concise English definition of this sense."}], "analysis":{ "pos":"词性", "phonetic":"音标带//", "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
 
 phrase:
-{ "type":"phrase", "translation":"整体含义,/分隔", "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
+{ "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","definition":"Concise English definition of this sense."}], "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
 
 sentence:
 { "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }
 
-要求:type 必须准确,pay off 类短语动词是 phrase 不是 sentence;word 的 inflections 只列不规则变化,规则的返回 [];所有中文字符间不加空格。`;
+要求:
+- type 必须准确,pay off 类短语动词是 phrase 不是 sentence
+- word 和 phrase 的 senses 按常用度列出最多 3 个义项；每个 zh 与 translation 中对应义项一致，translation 等于所有 zh 用 " / " 连接
+- definition 必须是对应义项的简洁自然英文解释，不能只是英文同义词或中文释义的重复，每项不超过 25 个英文单词
+- sentence 不要返回 senses
+- word 的 inflections 只列不规则变化,规则的返回 []
+- 所有中文字符间不加空格。`;
 }

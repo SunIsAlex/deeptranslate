@@ -16,7 +16,7 @@ export const OPTIONS_HEADERS = {
   "Access-Control-Max-Age": "86400",
 };
 
-export const CACHE_VERSION = "v2";
+export const CACHE_VERSION = "v3";
 export const CACHE_TTL_SEC = 60 * 60 * 24 * 30; // 30 天
 
 export function json(obj, status, headers) {

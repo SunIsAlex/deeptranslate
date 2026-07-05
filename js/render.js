@@ -16,7 +16,7 @@ export function render(data) {
 }
 
 function renderWord(data) {
-  const { input, translation, analysis } = data;
+  const { input, translation, senses, analysis } = data;
   const frag = document.createDocumentFragment();
 
   const h = document.createElement("h3");
@@ -36,7 +36,7 @@ function renderWord(data) {
   }
   frag.appendChild(h);
 
-  frag.appendChild(el("div", "translation", translation));
+  frag.appendChild(renderSenses(senses, translation));
   if (analysis?.fullForm) {
   frag.appendChild(el("div", "full-form", analysis.fullForm));
 }
@@ -75,7 +75,7 @@ function renderWord(data) {
 }
 
 function renderPhrase(data) {
-  const { input, translation, analysis } = data;
+  const { input, translation, senses, analysis } = data;
   const frag = document.createDocumentFragment();
 
   const h = document.createElement("h3");
@@ -88,7 +88,7 @@ function renderPhrase(data) {
   }
   frag.appendChild(h);
 
-  frag.appendChild(el("div", "translation", translation));
+  frag.appendChild(renderSenses(senses, translation));
 
   if (analysis?.usage) {
     frag.appendChild(section("用法", [el("li", "", analysis.usage)]));
@@ -107,6 +107,28 @@ function renderPhrase(data) {
     frag.appendChild(sec);
   }
   return frag;
+}
+
+// 新接口按义项同时返回中文释义和英文解释；fallback 兼容旧缓存或旧接口数据。
+function renderSenses(senses, fallback) {
+  const validSenses = Array.isArray(senses)
+    ? senses.filter((sense) => sense?.zh || sense?.definition)
+    : [];
+
+  if (!validSenses.length) return el("div", "translation", fallback || "");
+
+  const list = document.createElement("ol");
+  list.className = "sense-list";
+  validSenses.forEach((sense) => {
+    const item = document.createElement("li");
+    item.className = "sense-item";
+    if (sense.zh) item.appendChild(el("div", "sense-zh", sense.zh));
+    if (sense.definition) {
+      item.appendChild(el("div", "sense-definition", sense.definition));
+    }
+    list.appendChild(item);
+  });
+  return list;
 }
 
 function renderZh(data) {
