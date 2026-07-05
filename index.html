@@ -352,6 +352,13 @@
   padding: 0 1px;
   border-radius: 2px;
 }
+.streaming-result::after {
+  content: "▋";
+  display: inline-block;
+  color: var(--blue);
+  margin-top: 2px;
+  animation: blink 1s steps(2) infinite;
+}
 .zh-item { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--bg-soft); }
 .zh-item:last-child { border-bottom: none; }
 .zh-en { font-size: 17px; font-weight: 500; margin-bottom: 2px; }

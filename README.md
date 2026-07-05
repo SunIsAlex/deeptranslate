@@ -12,6 +12,7 @@
   - 句子：地道翻译、句法成分着色高亮、语法点提示
 - **中译英**：短语给 2-4 个备选表达及语域区别，句子给单一最地道译法
 - **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
+- **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
 - **KV 缓存**：重复查询毫秒级返回
 - **可分享链接**：`/w/单词`、`/p/词组`、`/s/句子`、`/zh/中文`，复制即分享
@@ -36,12 +37,16 @@
 │   ├── render.js              # 各类型结果渲染（word/phrase/sentence/zh）
 │   └── api.js                 # 翻译方向判断与后端请求
 ├── edgeone.json               # 路由 rewrite 配置
-└── edge-functions/
+├── edge-functions/
     ├── _lib/
     │   └── translate-core.js  # 公共工具：CORS、调模型、缓存、清洗
     └── api/
         ├── translate.js       # 英译中接口
+        ├── translate-cache.js # Node Function 与 Edge KV 之间的缓存桥接
         └── translate-zh.js    # 中译英接口
+└── node-functions/
+    └── api/
+        └── translate-stream.js # 英译中 SSE 流式接口
 ```
 
 ## 本地开发
@@ -89,6 +94,15 @@ edgeone pages dev         # 本地起调试服务
 
 返回 `direction: "zh2en"` + `translations` 数组（短语多条，句子单条）。
 
+### POST /api/translate-stream（英译中流式）
+
+请求体与 `/api/translate` 相同，响应类型为 `text/event-stream`。依次发送 `meta`、
+`translation`、零到多个 `example`、`result` 和 `done` 事件。`translation` 与每个
+`example` 都在字符串完整生成后发送；`result` 携带与非流式接口兼容的完整 JSON。
+
+流式接口运行在 Node Function 中。由于 EdgeOne KV 仅支持 Edge Functions，它通过
+`/api/translate-cache` 读取和回写原有缓存；缓存写入要求服务端密钥，浏览器不能写入。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -99,6 +113,7 @@ edgeone pages dev         # 本地起调试服务
 | `/s/:sentence` | 自动查询句子 |
 | `/zh/:中文` | 中译英 |
 | `/api/translate` | 英译中接口 |
+| `/api/translate-stream` | 英译中 SSE 流式接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。

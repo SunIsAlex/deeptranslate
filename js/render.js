@@ -15,6 +15,31 @@ export function render(data) {
   outputEl.appendChild(wrap);
 }
 
+// SSE 过程中只展示已经完整生成的译文和例句，最终结果会由 render 替换。
+export function renderStreaming({ input, translation, examples }) {
+  const wrap = document.createElement("div");
+  wrap.className = "result streaming-result";
+  wrap.appendChild(el("h3", "", input));
+  if (translation) wrap.appendChild(el("div", "translation", translation));
+
+  const completedExamples = (examples || []).filter(Boolean);
+  if (completedExamples.length) {
+    const sec = document.createElement("section");
+    sec.appendChild(el("h4", "", "例句"));
+    const ul = document.createElement("ul");
+    completedExamples.forEach((example) => {
+      const li = document.createElement("li");
+      li.innerHTML = highlightExample(example, input);
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    wrap.appendChild(sec);
+  }
+
+  outputEl.innerHTML = "";
+  outputEl.appendChild(wrap);
+}
+
 function renderWord(data) {
   const { input, translation, senses, analysis } = data;
   const frag = document.createDocumentFragment();

@@ -1,7 +1,7 @@
 // 入口控制器：提交流程、加载日志、路由恢复、复制、事件绑定
 import { inputEl, modeEl, submitBtn, statusEl, outputEl, copyBtn } from "./js/dom.js";
 import { detectDirection, translate } from "./js/api.js";
-import { render } from "./js/render.js";
+import { render, renderStreaming } from "./js/render.js";
 
 // ── 加载日志与状态 ──────────────────────────────
 function setStage(line) {
@@ -41,7 +41,23 @@ async function handleSubmit() {
   setStage(`> direction: ${direction}  |  length: ${text.length} chars`);
 
   try {
-    const { res, data, total } = await translate(text, modeEl.value, setStage);
+    const partial = { input: text, translation: "", examples: [] };
+    const onStreamEvent = (event, data) => {
+      if (event === "translation") {
+        partial.translation = data.text || "";
+        renderStreaming(partial);
+        setStatus("生成中…");
+      } else if (event === "example" && data.text) {
+        partial.examples[data.index ?? partial.examples.length] = data.text;
+        renderStreaming(partial);
+      }
+    };
+    const { res, data, total } = await translate(
+      text,
+      modeEl.value,
+      setStage,
+      onStreamEvent,
+    );
 
     if (!res.ok) {
       setStatus(data.message || data.error || `请求失败 ${res.status}`);
