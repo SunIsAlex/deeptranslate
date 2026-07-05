@@ -15,6 +15,7 @@
   let host = null; // tooltip 宿主元素
   let shadow = null;
   let lastReqId = 0;
+  let activePort = null;
 
   document.addEventListener(
   "keydown",
@@ -63,21 +64,85 @@
 
   async function translateAndShow(text, rect) {
     const reqId = ++lastReqId;
+    disconnectActivePort();
     showTooltip(rect, loadingNode(text));
 
-    let resp;
     try {
-      resp = await chrome.runtime.sendMessage({ type: "translate", text });
+      const partial = { input: text, translation: "", senses: [], examples: [] };
+      const data = await requestTranslation(text, (event, eventData) => {
+        if (reqId !== lastReqId) return;
+        if (event === "translation") {
+          partial.translation = eventData?.text || "";
+          showTooltip(rect, renderStreaming(partial));
+        } else if (event === "senses" && Array.isArray(eventData?.items)) {
+          partial.senses = eventData.items;
+          showTooltip(rect, renderStreaming(partial));
+        } else if (event === "example" && eventData?.text) {
+          const index = Number.isInteger(eventData.index)
+            ? eventData.index
+            : partial.examples.length;
+          partial.examples[index] = eventData.text;
+          showTooltip(rect, renderStreaming(partial));
+        }
+      });
+      if (reqId !== lastReqId) return;
+      showTooltip(rect, render(data));
     } catch (e) {
-      resp = { ok: false, error: String(e) };
+      if (reqId !== lastReqId) return;
+      showTooltip(rect, errorNode(e?.message || String(e), e?.data));
     }
-    if (reqId !== lastReqId) return; // 已被更新的请求取代
+  }
 
-    if (!resp?.ok) {
-      showTooltip(rect, errorNode(resp?.error || "请求失败", resp?.data));
-      return;
-    }
-    showTooltip(rect, render(resp.data));
+  function requestTranslation(text, onEvent) {
+    return new Promise((resolve, reject) => {
+      const port = chrome.runtime.connect({ name: "translate-stream" });
+      activePort = port;
+      let result = null;
+      let settled = false;
+
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        if (activePort === port) activePort = null;
+        try {
+          port.disconnect();
+        } catch {}
+        callback(value);
+      };
+
+      port.onMessage.addListener(({ event, data }) => {
+        if (event === "error") {
+          const error = new Error(data?.error || "请求失败");
+          error.data = data;
+          finish(reject, error);
+          return;
+        }
+        if (event === "result") result = data;
+        if (event === "done") {
+          if (result) finish(resolve, result);
+          else finish(reject, new Error("翻译请求未返回结果"));
+          return;
+        }
+        onEvent(event, data);
+      });
+
+      port.onDisconnect.addListener(() => {
+        if (settled) return;
+        const message = chrome.runtime.lastError?.message || "翻译连接意外断开";
+        finish(reject, new Error(message));
+      });
+
+      port.postMessage({ type: "translate", text });
+    });
+  }
+
+  function disconnectActivePort() {
+    if (!activePort) return;
+    const port = activePort;
+    activePort = null;
+    try {
+      port.disconnect();
+    } catch {}
   }
 
   // ---------- tooltip 容器（Shadow DOM 隔离页面样式）----------
@@ -99,6 +164,7 @@
   }
 
   function removeTooltip() {
+    disconnectActivePort();
     if (host) {
       host.remove();
       host = null;
@@ -204,10 +270,10 @@
   }
 
   function renderWord(data) {
-    const { input, translation, analysis } = data;
+    const { input, translation, senses, analysis } = data;
     const frag = document.createDocumentFragment();
     frag.appendChild(header(input, analysis, true));
-    frag.appendChild(el("div", "dt-translation", translation));
+    frag.appendChild(renderSenses(senses, translation));
     if (analysis?.fullForm) frag.appendChild(el("div", "dt-full-form", analysis.fullForm));
 
     if (analysis?.inflections?.length) {
@@ -231,13 +297,42 @@
   }
 
   function renderPhrase(data) {
-    const { input, translation, analysis } = data;
+    const { input, translation, senses, analysis } = data;
     const frag = document.createDocumentFragment();
     frag.appendChild(header(input, analysis, false));
-    frag.appendChild(el("div", "dt-translation", translation));
+    frag.appendChild(renderSenses(senses, translation));
     if (analysis?.usage) frag.appendChild(section("用法", [el("li", "", analysis.usage)]));
     if (analysis?.examples?.length) frag.appendChild(exampleSection(analysis.examples, input));
     return frag;
+  }
+
+  function renderSenses(senses, fallback) {
+    const validSenses = Array.isArray(senses)
+      ? senses.filter((sense) => sense?.zh || sense?.definition)
+      : [];
+    if (!validSenses.length) return el("div", "dt-translation", fallback || "");
+
+    const list = el("ol", "dt-sense-list");
+    validSenses.forEach((sense) => {
+      const item = el("li", "dt-sense-item");
+      if (sense.zh) item.appendChild(el("div", "dt-sense-zh", sense.zh));
+      if (sense.definition) {
+        item.appendChild(el("div", "dt-sense-definition", sense.definition));
+      }
+      list.appendChild(item);
+    });
+    return list;
+  }
+
+  function renderStreaming({ input, translation, senses, examples }) {
+    const wrap = el("div", "dt-result dt-streaming-result");
+    wrap.appendChild(el("div", "dt-h3", input));
+    if (translation || senses?.length) wrap.appendChild(renderSenses(senses, translation));
+    const completedExamples = (examples || []).filter(Boolean);
+    if (completedExamples.length) {
+      wrap.appendChild(exampleSection(completedExamples, input));
+    }
+    return wrap;
   }
 
   function renderSentence(data) {
@@ -433,6 +528,10 @@
     .dt-phonetic { font-weight: 400; color: #5b6b7c; margin-left: 8px; font-size: 13px; }
     .dt-pos { font-weight: 400; color: #1a73e8; background: #e8f0fe; border-radius: 4px; padding: 0 6px; margin-left: 8px; font-size: 12px; }
     .dt-translation { font-size: 15px; margin: 4px 0 8px; }
+    .dt-sense-list { margin: 4px 0 8px; padding-left: 22px; }
+    .dt-sense-item { padding: 2px 0 4px; }
+    .dt-sense-zh { font-size: 15px; font-weight: 500; }
+    .dt-sense-definition { color: #667085; font-size: 13px; line-height: 1.45; }
     .dt-full-form { color: #5b6b7c; font-size: 13px; margin: -4px 0 8px; }
     .dt-section { margin-top: 10px; }
     .dt-section h4 { margin: 0 0 4px; font-size: 13px; color: #5b6b7c; font-weight: 600; }
@@ -457,6 +556,11 @@
     .dt-error-title { font-weight: 600; color: #d92d20; }
     .dt-error-msg { color: #5b6b7c; margin-top: 2px; word-break: break-all; }
     .dt-raw { white-space: pre-wrap; word-break: break-all; font-size: 12px; background: #f7f8fa; border-radius: 6px; padding: 8px; margin-top: 6px; }
+    .dt-streaming-result::after {
+      content: "▋"; display: inline-block; color: #1a73e8;
+      animation: dt-blink .8s step-end infinite;
+    }
+    @keyframes dt-blink { 50% { opacity: 0; } }
   `;
   // 若选区落在单个英文单词内部/部分，扩展到完整单词
 // 返回扩展后的完整单词；无法扩展时返回 null
