@@ -102,7 +102,7 @@
   }
   .panels {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
@@ -115,6 +115,8 @@
     padding: 16px 20px;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
   .panel-header {
     display: flex;
@@ -170,9 +172,18 @@
     padding: 0;
   }
   textarea::placeholder { color: #bdc1c6; }
+  #input-text {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    white-space: pre;
+  }
   .output {
     flex: 1;
-    overflow-y: auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
     font-size: 15px;
   }
   .output-placeholder { color: #bdc1c6; font-size: 22px; }
@@ -426,7 +437,7 @@
   font-style: italic;
 }
   @media (max-width: 720px) {
-    .panels { grid-template-columns: 1fr; min-height: auto; }
+    .panels { grid-template-columns: minmax(0, 1fr); min-height: auto; }
     .panel { min-height: 200px; }
     textarea, .output-placeholder { font-size: 18px; }
     main { padding: 12px; }
@@ -528,7 +539,7 @@
     </select>
   </div>
 </div>
-<textarea id="input-text" placeholder="输入英文（查词义/语法）或中文（查英文表达）"></textarea>
+<textarea id="input-text" wrap="off" placeholder="输入英文（查词义/语法）或中文（查英文表达）"></textarea>
       </div>
       <div class="panel">
         <div class="panel-header">
