@@ -40,6 +40,67 @@ export function renderStreaming({ input, translation, senses, examples }) {
   outputEl.appendChild(wrap);
 }
 
+export function renderMarkdown(container, source) {
+  if (!globalThis.marked?.parse) {
+    container.textContent = source;
+    return;
+  }
+  const html = globalThis.marked.parse(source, { gfm: true, breaks: true });
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  sanitizeMarkdown(template.content);
+  container.replaceChildren(template.content);
+}
+
+function sanitizeMarkdown(root) {
+  const allowedTags = new Set([
+    "A", "B", "BLOCKQUOTE", "BR", "CODE", "DEL", "EM", "H1", "H2", "H3",
+    "H4", "H5", "H6", "HR", "I", "LI", "OL", "P", "PRE", "S", "STRONG",
+    "TABLE", "TBODY", "TD", "TH", "THEAD", "TR", "UL",
+  ]);
+  const blockedTags = new Set([
+    "AUDIO", "BUTTON", "EMBED", "FORM", "IFRAME", "INPUT", "LINK", "MATH",
+    "META", "OBJECT", "SCRIPT", "SOURCE", "STYLE", "SVG", "TEMPLATE", "VIDEO",
+  ]);
+
+  root.querySelectorAll("*").forEach((node) => {
+    if (blockedTags.has(node.tagName)) {
+      node.remove();
+      return;
+    }
+    if (!allowedTags.has(node.tagName)) {
+      node.replaceWith(...node.childNodes);
+      return;
+    }
+
+    const href = node.tagName === "A" ? node.getAttribute("href") : null;
+    const title = node.tagName === "A" ? node.getAttribute("title") : null;
+    const codeClass = node.tagName === "CODE" ? node.getAttribute("class") : null;
+    [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
+
+    if (node.tagName === "A" && isSafeLink(href)) {
+      node.setAttribute("href", href);
+      if (title) node.setAttribute("title", title);
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+    if (node.tagName === "CODE" && /^language-[\w-]+$/.test(codeClass || "")) {
+      node.setAttribute("class", codeClass);
+    }
+  });
+}
+
+function isSafeLink(href) {
+  if (!href) return false;
+  if (href.startsWith("#") || href.startsWith("/")) return true;
+  try {
+    const url = new URL(href, location.origin);
+    return ["http:", "https:", "mailto:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
 function renderWord(data) {
   const { input, translation, senses, analysis } = data;
   const frag = document.createDocumentFragment();

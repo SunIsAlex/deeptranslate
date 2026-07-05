@@ -5,7 +5,7 @@ import {
   followUpEl, followUpThreadEl, followUpInputEl, followUpBtn,
 } from "./js/dom.js";
 import { askFollowUp, detectDirection, translate } from "./js/api.js";
-import { render, renderStreaming } from "./js/render.js";
+import { render, renderMarkdown, renderStreaming } from "./js/render.js";
 
 let currentTranslation = null;
 let followUpHistory = [];
@@ -157,6 +157,7 @@ async function handleFollowUp() {
   const controller = new AbortController();
   followUpController = controller;
   let streamedAnswer = "";
+  let renderFrame = null;
 
   try {
     const answer = await askFollowUp({
@@ -167,12 +168,21 @@ async function handleFollowUp() {
       signal: controller.signal,
       onDelta(delta) {
         streamedAnswer += delta;
-        answerEl.textContent = streamedAnswer;
+        if (renderFrame === null) {
+          renderFrame = requestAnimationFrame(() => {
+            renderFrame = null;
+            renderMarkdown(answerEl, streamedAnswer);
+          });
+        }
       },
     });
-    answerEl.textContent = answer;
+    if (renderFrame !== null) cancelAnimationFrame(renderFrame);
+    renderFrame = null;
+    renderMarkdown(answerEl, answer);
     followUpHistory.push({ question, answer });
   } catch (error) {
+    if (renderFrame !== null) cancelAnimationFrame(renderFrame);
+    renderFrame = null;
     if (error.name !== "AbortError") {
       answerEl.textContent = `回答失败：${error.message}`;
       answerEl.classList.add("follow-up-error");

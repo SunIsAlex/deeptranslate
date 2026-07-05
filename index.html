@@ -223,6 +223,44 @@
     align-self: flex-start;
     background: var(--bg-soft);
   }
+  .follow-up-assistant > :first-child { margin-top: 0; }
+  .follow-up-assistant > :last-child { margin-bottom: 0; }
+  .follow-up-assistant p { margin: 0 0 8px; }
+  .follow-up-assistant ul,
+  .follow-up-assistant ol { margin: 6px 0 8px; padding-left: 22px; }
+  .follow-up-assistant li { margin: 2px 0; }
+  .follow-up-assistant blockquote {
+    margin: 8px 0;
+    padding-left: 10px;
+    color: var(--text-secondary);
+    border-left: 3px solid var(--border);
+  }
+  .follow-up-assistant code {
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #eef0f2;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  .follow-up-assistant pre {
+    margin: 8px 0;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 5px;
+    background: #eef0f2;
+  }
+  .follow-up-assistant pre code { padding: 0; background: transparent; }
+  .follow-up-assistant a { color: var(--blue); }
+  .follow-up-assistant table {
+    margin: 8px 0;
+    border-collapse: collapse;
+  }
+  .follow-up-assistant th,
+  .follow-up-assistant td {
+    padding: 4px 7px;
+    border: 1px solid var(--border);
+    text-align: left;
+  }
   .follow-up-assistant.streaming::after {
     content: "▋";
     color: var(--blue);
@@ -523,6 +561,7 @@
     </section>
     
   </main>
+  <script src="/js/marked.min.js"></script>
   <script type="module" src="/app.js"></script>
   <script>
 (function () {
