@@ -3,7 +3,7 @@
 
 import {
   CORS, OPTIONS_HEADERS, json, callModel,
-  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache,
+  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
 } from "../_lib/translate-core.js";
 
 const SYSTEM = "你是英语语言学助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 examples 例句中，把目标单词/词组实际出现的形态用 [[ ]] 括起来（如 He finally [[paid off]] his debts.），只括英文部分，中文翻译里不要加。";
@@ -35,8 +35,11 @@ async function handle({ request, env }) {
 
   const mode = body.mode || "auto";
   const route = resolveRoute(text, mode);
+  const grammarAnalysis = body.grammarAnalysis !== false;
+  const model = resolveModel(body.model, env);
 
-  const cacheKey = buildCacheKey("en2zh", route, text);
+  const variant = `${model}:${grammarAnalysis ? "grammar" : "translation"}`;
+  const cacheKey = buildCacheKey("en2zh", route, text, variant);
   const cached = await readCache(cacheKey);
   if (cached) {
     return json({ ...cached, input: text, _cached: true }, 200, CORS);
@@ -44,10 +47,10 @@ async function handle({ request, env }) {
 
   let prompt;
   if (route === "word") prompt = wordPrompt(text);
-  else if (route === "sentence") prompt = sentencePrompt(text);
-  else prompt = autoPrompt(text);
+  else if (route === "sentence") prompt = sentencePrompt(text, grammarAnalysis);
+  else prompt = autoPrompt(text, grammarAnalysis);
 
-  const upstream = await callModel(prompt, env, SYSTEM);
+  const upstream = await callModel(prompt, env, SYSTEM, model);
   if (!upstream.ok) {
     const errText = await upstream.text();
     return json({ error: "upstream_error", status: upstream.status, detail: errText }, 502, CORS);
@@ -68,7 +71,14 @@ async function handle({ request, env }) {
 
   parsed = cleanCJKSpaces(parsed);
   const finalType = route === "auto" ? (parsed.type || "sentence") : route;
-  const result = { direction: "en2zh", input: text, ...parsed, type: finalType };
+  const result = {
+    direction: "en2zh",
+    input: text,
+    ...parsed,
+    type: finalType,
+    model,
+    grammarAnalysis,
+  };
 
   writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
 
@@ -112,7 +122,12 @@ function wordPrompt(word) {
 - 所有中文简洁,字符间不加空格`;
 }
 
-function sentencePrompt(sentence) {
+function sentencePrompt(sentence, grammarAnalysis) {
+  if (!grammarAnalysis) {
+    return `把英文句子翻译成地道中文："${sentence}"。只输出 json：
+{ "translation": "地道的中文翻译" }
+要求：不要返回语法分析或其他字段；中文字符之间不要插入空格。`;
+  }
   return `分析英文句子："${sentence}"。只输出 json，结构如下：
 {
   "translation": "地道的中文翻译",
@@ -129,7 +144,10 @@ function sentencePrompt(sentence) {
 - 中文字符之间不要插入空格`;
 }
 
-function autoPrompt(text) {
+function autoPrompt(text, grammarAnalysis) {
+  const sentenceSchema = grammarAnalysis
+    ? `{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }`
+    : `{ "type":"sentence", "translation":"地道翻译" }`;
   return `判断并分析:"${text}"。它可能是:
 - word:单词
 - phrase:词组/短语动词/固定搭配(如 pay off、give up、look forward to)
@@ -144,13 +162,14 @@ phrase:
 { "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","definition":"Concise English definition of this sense."}], "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
 
 sentence:
-{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }
+${sentenceSchema}
 
 要求:
 - type 必须准确,pay off 类短语动词是 phrase 不是 sentence
 - word 和 phrase 的 senses 按常用度列出最多 3 个义项；每个 zh 与 translation 中对应义项一致，translation 等于所有 zh 用 " / " 连接
 - definition 必须是对应义项的简洁自然英文解释，不能只是英文同义词或中文释义的重复，每项不超过 25 个英文单词
 - sentence 不要返回 senses
+- sentence ${grammarAnalysis ? "必须返回 analysis 语法分析" : "只返回 type 和 translation，不要返回 analysis"}
 - word 的 inflections 只列不规则变化,规则的返回 []
 - 所有中文字符间不加空格。`;
 }

@@ -11,28 +11,34 @@ export function detectDirection(text) {
  * @param {string} mode 分析模式（仅 en2zh 使用）
  * @param {(line: string) => void} onStage 各阶段加载日志回调
  * @param {(event: string, data: any) => void} [onEvent] 流式事件回调
+ * @param {{grammarAnalysis?: boolean, model?: string}} [settings] 翻译选项
  * @returns {Promise<{res: Response, data: any, direction: string, total: number}>}
  */
-export async function translate(text, mode, onStage, onEvent) {
+export async function translate(text, mode, onStage, onEvent, settings = {}) {
   const direction = detectDirection(text);
   if (direction === "en2zh" && typeof ReadableStream !== "undefined") {
     try {
-      return await translateStream(text, mode, onStage, onEvent);
+      return await translateStream(text, mode, settings, onStage, onEvent);
     } catch (error) {
       onStage(`> stream unavailable: ${error.message}`);
       onStage("> falling back to JSON API…");
     }
   }
 
-  return translateJson(text, mode, direction, onStage);
+  return translateJson(text, mode, direction, settings, onStage);
 }
 
-async function translateJson(text, mode, direction, onStage) {
+async function translateJson(text, mode, direction, settings, onStage) {
   const apiUrl = direction === "zh2en" ? "/api/translate-zh" : "/api/translate";
   // zh2en 不需要 mode；en2zh 带上 mode
   const payload = direction === "zh2en"
-    ? JSON.stringify({ text })
-    : JSON.stringify({ text, mode });
+    ? JSON.stringify({ text, model: settings.model })
+    : JSON.stringify({
+      text,
+      mode,
+      grammarAnalysis: settings.grammarAnalysis !== false,
+      model: settings.model,
+    });
 
   const t0 = performance.now();
   onStage(`> POST ${apiUrl}  (${payload.length} bytes)`);
@@ -52,9 +58,14 @@ async function translateJson(text, mode, direction, onStage) {
   return { res, data, direction, total };
 }
 
-async function translateStream(text, mode, onStage, onEvent) {
+async function translateStream(text, mode, settings, onStage, onEvent) {
   const apiUrl = "/api/translate-stream";
-  const payload = JSON.stringify({ text, mode });
+  const payload = JSON.stringify({
+    text,
+    mode,
+    grammarAnalysis: settings.grammarAnalysis !== false,
+    model: settings.model,
+  });
   const t0 = performance.now();
   onStage(`> POST ${apiUrl}  (${payload.length} bytes)`);
 

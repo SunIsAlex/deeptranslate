@@ -2,6 +2,8 @@
 
 export const inputEl = document.getElementById("input-text");
 export const modeEl = document.getElementById("mode");
+export const grammarAnalysisEl = document.getElementById("grammar-analysis");
+export const modelEl = document.getElementById("model");
 export const submitBtn = document.getElementById("submit-btn");
 export const statusEl = document.getElementById("status");
 export const outputEl = document.getElementById("output");

@@ -16,8 +16,9 @@ export const OPTIONS_HEADERS = {
   "Access-Control-Max-Age": "86400",
 };
 
-export const CACHE_VERSION = "v3";
+export const CACHE_VERSION = "v4";
 export const CACHE_TTL_SEC = 60 * 60 * 24 * 30; // 30 天
+export const SUPPORTED_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
 export function json(obj, status, headers) {
   return new Response(JSON.stringify(obj), { status, headers });
@@ -25,10 +26,18 @@ export function json(obj, status, headers) {
 
 // 调 DeepSeek，封装 system prompt、eo 超时、thinking 关闭等公共配置
 // systemContent 可定制（英译中和中译英的 system 略不同）
-export async function callModel(userPrompt, env, systemContent) {
-  const apiKey = env.DEEPSEEK_API_KEY;
-  const model = env.DEEPSEEK_MODEL || "deepseek-chat";
-  const apiUrl = env.DEEPSEEK_API_URL || "https://api.deepseek.com/chat/completions";
+export function resolveModel(requested, env) {
+  if (SUPPORTED_MODELS.includes(requested)) return requested;
+  const configured = env?.DEEPSEEK_MODEL || globalThis.DEEPSEEK_MODEL;
+  return SUPPORTED_MODELS.includes(configured) ? configured : "deepseek-v4-flash";
+}
+
+export async function callModel(userPrompt, env, systemContent, model) {
+  const apiKey = env?.DEEPSEEK_API_KEY || globalThis.DEEPSEEK_API_KEY;
+  const selectedModel = resolveModel(model, env);
+  const apiUrl = env?.DEEPSEEK_API_URL
+    || globalThis.DEEPSEEK_API_URL
+    || "https://api.deepseek.com/chat/completions";
 
   const upstream = await fetch(apiUrl, {
     method: "POST",
@@ -37,7 +46,7 @@ export async function callModel(userPrompt, env, systemContent) {
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: selectedModel,
       messages: [
         { role: "system", content: systemContent },
         { role: "user", content: userPrompt },
@@ -70,11 +79,12 @@ export function cleanCJKSpaces(obj) {
 }
 
 // 缓存键：方向进 key，避免英译中/中译英冲突
-export function buildCacheKey(direction, route, text) {
+export function buildCacheKey(direction, route, text, variant = "default") {
   const normalized = route === "word" ? text.toLowerCase() : text;
   if (normalized.length > 80) return null; // 长文本不缓存（避开 crypto.subtle）
   const safe = normalized.replace(/[\s/\\'"]+/g, "_");
-  return `tr:${CACHE_VERSION}:${direction}:${route}:${safe}`;
+  const safeVariant = variant.replace(/[^a-z0-9:_-]+/gi, "_");
+  return `tr:${CACHE_VERSION}:${direction}:${route}:${safeVariant}:${safe}`;
 }
 
 export async function readCache(key) {

@@ -1,6 +1,7 @@
 // 英译中流式接口：完整译文/例句按项推送，最终发送完整 JSON。
 
 const SYSTEM = "你是英语语言学助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 examples 例句中，把目标单词/词组实际出现的形态用 [[ ]] 括起来，只括英文部分，中文翻译里不要加。";
+const SUPPORTED_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
 const JSON_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -32,12 +33,20 @@ export async function onRequestPost(context) {
 
   const mode = body.mode || "auto";
   const route = resolveRoute(text, mode);
+  const grammarAnalysis = body.grammarAnalysis !== false;
+  const model = resolveModel(body.model, context);
   const apiKey = envValue(context, "DEEPSEEK_API_KEY");
   if (!apiKey) return json({ error: "server_not_configured" }, 500);
 
-  const cached = await readEdgeCache(request.url, text, route);
+  const cached = await readEdgeCache(
+    request.url,
+    text,
+    route,
+    model,
+    grammarAnalysis,
+  );
   if (cached) {
-    return createCachedStream(cached, text, route);
+    return createCachedStream(cached, text, route, model, grammarAnalysis);
   }
 
   const abortController = new AbortController();
@@ -52,10 +61,10 @@ export async function onRequestPost(context) {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: envValue(context, "DEEPSEEK_MODEL") || "deepseek-chat",
+        model,
         messages: [
           { role: "system", content: SYSTEM },
-          { role: "user", content: promptFor(route, text) },
+          { role: "user", content: promptFor(route, text, grammarAnalysis) },
         ],
         temperature: 0.2,
         response_format: { type: "json_object" },
@@ -78,6 +87,8 @@ export async function onRequestPost(context) {
     writer,
     text,
     route,
+    model,
+    grammarAnalysis,
     apiKey,
     requestUrl: request.url,
   });
@@ -98,7 +109,16 @@ export async function onRequestOptions() {
   });
 }
 
-async function pumpModelStream({ upstream, writer, text, route, apiKey, requestUrl }) {
+async function pumpModelStream({
+  upstream,
+  writer,
+  text,
+  route,
+  model,
+  grammarAnalysis,
+  apiKey,
+  requestUrl,
+}) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const reader = upstream.body.getReader();
@@ -112,7 +132,7 @@ async function pumpModelStream({ upstream, writer, text, route, apiKey, requestU
     writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 
   try {
-    await send("meta", { route, cached: false });
+    await send("meta", { route, model, grammarAnalysis, cached: false });
 
     while (true) {
       const { done, value } = await reader.read();
@@ -168,6 +188,8 @@ async function pumpModelStream({ upstream, writer, text, route, apiKey, requestU
       input: text,
       ...parsed,
       type: finalType,
+      model,
+      grammarAnalysis,
       _cached: false,
       _streamed: true,
     };
@@ -184,7 +206,15 @@ async function pumpModelStream({ upstream, writer, text, route, apiKey, requestU
 
     await send("result", result);
     await send("done", {});
-    cacheWrite = writeEdgeCache(requestUrl, text, route, result, apiKey);
+    cacheWrite = writeEdgeCache(
+      requestUrl,
+      text,
+      route,
+      model,
+      grammarAnalysis,
+      result,
+      apiKey,
+    );
   } catch (error) {
     if (error?.name !== "AbortError") {
       try {
@@ -203,7 +233,7 @@ async function pumpModelStream({ upstream, writer, text, route, apiKey, requestU
   }
 }
 
-function createCachedStream(cached, text, route) {
+function createCachedStream(cached, text, route, model, grammarAnalysis) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
@@ -215,10 +245,12 @@ function createCachedStream(cached, text, route) {
       const result = {
         ...cached,
         input: text,
+        model,
+        grammarAnalysis,
         _cached: true,
         _streamed: true,
       };
-      send("meta", { route, cached: true });
+      send("meta", { route, model, grammarAnalysis, cached: true });
       if (result.translation) send("translation", { text: result.translation });
       (result.analysis?.examples || []).forEach((example, index) => {
         send("example", { index, text: example });
@@ -231,12 +263,18 @@ function createCachedStream(cached, text, route) {
   return new Response(stream, { headers: SSE_HEADERS });
 }
 
-async function readEdgeCache(requestUrl, text, route) {
+async function readEdgeCache(requestUrl, text, route, model, grammarAnalysis) {
   try {
     const response = await fetch(new URL("/api/translate-cache", requestUrl), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get", text, route }),
+      body: JSON.stringify({
+        action: "get",
+        text,
+        route,
+        model,
+        grammarAnalysis,
+      }),
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -246,7 +284,15 @@ async function readEdgeCache(requestUrl, text, route) {
   }
 }
 
-async function writeEdgeCache(requestUrl, text, route, result, apiKey) {
+async function writeEdgeCache(
+  requestUrl,
+  text,
+  route,
+  model,
+  grammarAnalysis,
+  result,
+  apiKey,
+) {
   try {
     await fetch(new URL("/api/translate-cache", requestUrl), {
       method: "POST",
@@ -254,7 +300,14 @@ async function writeEdgeCache(requestUrl, text, route, result, apiKey) {
         "Content-Type": "application/json",
         "X-Cache-Token": apiKey,
       },
-      body: JSON.stringify({ action: "put", text, route, result }),
+      body: JSON.stringify({
+        action: "put",
+        text,
+        route,
+        model,
+        grammarAnalysis,
+        result,
+      }),
     });
   } catch (error) {
     console.error("stream cache write failed:", error);
@@ -263,6 +316,12 @@ async function writeEdgeCache(requestUrl, text, route, result, apiKey) {
 
 function envValue(context, name) {
   return context.env?.[name] || process.env?.[name] || globalThis[name];
+}
+
+function resolveModel(requested, context) {
+  if (SUPPORTED_MODELS.includes(requested)) return requested;
+  const configured = envValue(context, "DEEPSEEK_MODEL");
+  return SUPPORTED_MODELS.includes(configured) ? configured : "deepseek-v4-flash";
 }
 
 function json(value, status) {
@@ -363,10 +422,10 @@ function resolveRoute(text, mode) {
   return "auto";
 }
 
-function promptFor(route, text) {
+function promptFor(route, text, grammarAnalysis) {
   if (route === "word") return wordPrompt(text);
-  if (route === "sentence") return sentencePrompt(text);
-  return autoPrompt(text);
+  if (route === "sentence") return sentencePrompt(text, grammarAnalysis);
+  return autoPrompt(text, grammarAnalysis);
 }
 
 function wordPrompt(word) {
@@ -394,7 +453,12 @@ function wordPrompt(word) {
 - 所有中文简洁,字符间不加空格`;
 }
 
-function sentencePrompt(sentence) {
+function sentencePrompt(sentence, grammarAnalysis) {
+  if (!grammarAnalysis) {
+    return `把英文句子翻译成地道中文："${sentence}"。只输出 json：
+{ "translation": "地道的中文翻译" }
+要求：不要返回语法分析或其他字段；中文字符之间不要插入空格。`;
+  }
   return `分析英文句子："${sentence}"。只输出 json：
 {
   "translation": "地道的中文翻译",
@@ -410,7 +474,10 @@ function sentencePrompt(sentence) {
 - 中文字符之间不要插入空格`;
 }
 
-function autoPrompt(text) {
+function autoPrompt(text, grammarAnalysis) {
+  const sentenceSchema = grammarAnalysis
+    ? `{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }`
+    : `{ "type":"sentence", "translation":"地道翻译" }`;
   return `判断并分析:"${text}"。它可能是 word 单词、phrase 词组或 sentence 句子。只输出 json。
 
 word:
@@ -420,11 +487,12 @@ phrase:
 { "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","definition":"Concise English definition."}], "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
 
 sentence:
-{ "type":"sentence", "translation":"地道翻译", "analysis":{ "structure":"句法结构概括", "components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"片段","note":"说明≤15字"}], "grammar_points":["语法点,最多2条≤20字"] } }
+${sentenceSchema}
 
 要求:
 - type 必须准确,pay off 类短语动词是 phrase
 - word 和 phrase 的 senses 按常用度最多3项,definition 是对应义项的简洁英文解释且不超过25词
-- sentence 不返回 senses;word 的规则词形变化返回 []
+- sentence 不返回 senses,且${grammarAnalysis ? "必须返回 analysis 语法分析" : "只返回 type 和 translation,不要返回 analysis"}
+- word 的规则词形变化返回 []
 - 所有中文字符间不加空格`;
 }

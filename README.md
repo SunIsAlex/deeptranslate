@@ -13,6 +13,7 @@
 - **中译英**：短语给 2-4 个备选表达及语域区别，句子给单一最地道译法
 - **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
+- **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
 - **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
 - **KV 缓存**：重复查询毫秒级返回
 - **可分享链接**：`/w/单词`、`/p/词组`、`/s/句子`、`/zh/中文`，复制即分享
@@ -21,9 +22,9 @@
 ## 技术栈
 
 - 前端：原生 HTML / CSS / JS，无框架
-- 后端：EdgeOne Pages Edge Functions
+- 后端：EdgeOne Pages Edge Functions + Node Functions
 - 缓存：EdgeOne KV
-- 模型：DeepSeek（默认 deepseek-chat，可配置 deepseek-v4-flash 等）
+- 模型：DeepSeek V4 Flash / Pro（默认 deepseek-v4-flash）
 
 ## 目录结构
 
@@ -67,7 +68,7 @@ edgeone pages dev         # 本地起调试服务
 | 变量 | 说明 | 默认 |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | DeepSeek 密钥 | 必填 |
-| `DEEPSEEK_MODEL` | 模型名 | deepseek-chat |
+| `DEEPSEEK_MODEL` | 未指定前端模型时的默认模型 | deepseek-v4-flash |
 | `DEEPSEEK_API_URL` | API 地址 | https://api.deepseek.com/chat/completions |
 
 注意：EdgeOne 把环境变量注入为**全局变量**，不在 `context.env` 上；KV 命名空间同理，绑定时变量名填 `KV`。
@@ -77,10 +78,18 @@ edgeone pages dev         # 本地起调试服务
 ### POST /api/translate（英译中）
 
 ```json
-{ "text": "unbelievable", "mode": "auto" }
+{
+  "text": "unbelievable",
+  "mode": "auto",
+  "grammarAnalysis": true,
+  "model": "deepseek-v4-flash"
+}
 ```
 
 `mode` 可选 `auto`（默认）/ `word` / `sentence`。`auto` 时后端按词数和标点分流：单词走 word，明显句子走 sentence，2-4 词的模糊输入交给模型判断（含识别词组）。
+
+`grammarAnalysis` 默认为 `true`，仅影响英文句子；设为 `false` 时句子只返回译文。
+`model` 仅接受 `deepseek-v4-flash` 或 `deepseek-v4-pro`，缺省或非法值回退到服务端默认模型。
 
 返回 `type` 字段标明实际类型（word / phrase / sentence），前端据此渲染。单词和词组还返回结构化
 `senses: [{ "zh": "中文义项", "definition": "English definition." }]`；原有 `translation`
@@ -89,7 +98,7 @@ edgeone pages dev         # 本地起调试服务
 ### POST /api/translate-zh（中译英）
 
 ```json
-{ "text": "再接再厉" }
+{ "text": "再接再厉", "model": "deepseek-v4-flash" }
 ```
 
 返回 `direction: "zh2en"` + `translations` 数组（短语多条，句子单条）。

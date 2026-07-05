@@ -127,6 +127,27 @@
     font-size: 13px;
     color: var(--text-secondary);
   }
+  .source-options {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .check-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .check-option:hover { background: var(--bg-soft); }
+  .check-option input {
+    margin: 0;
+    accent-color: var(--blue);
+  }
   select {
     border: none;
     background: transparent;
@@ -312,6 +333,8 @@
     .panel { min-height: 200px; }
     textarea, .output-placeholder { font-size: 18px; }
     main { padding: 12px; }
+    .source-options { gap: 0; }
+    .check-option, select { font-size: 12px; padding-inline: 4px; }
   }
   .icon-btn {
   background: transparent;
@@ -388,13 +411,23 @@
   <main>
     <div class="panels">
       <div class="panel">
-        <div class="panel-header">
+<div class="panel-header">
   <span class="panel-label">原文</span>
-  <select id="mode" title="分析模式">
-    <option value="auto">自动</option>
-    <option value="word">单词</option>
-    <option value="sentence">句子</option>
-  </select>
+  <div class="source-options">
+    <label class="check-option" title="仅影响英文句子">
+      <input id="grammar-analysis" type="checkbox" checked>
+      <span>语法分析</span>
+    </label>
+    <select id="model" title="DeepSeek 模型" aria-label="DeepSeek 模型">
+      <option value="deepseek-v4-flash">V4 Flash</option>
+      <option value="deepseek-v4-pro">V4 Pro</option>
+    </select>
+    <select id="mode" title="分析模式" aria-label="分析模式">
+      <option value="auto">自动</option>
+      <option value="word">单词</option>
+      <option value="sentence">句子</option>
+    </select>
+  </div>
 </div>
 <textarea id="input-text" placeholder="输入英文（查词义/语法）或中文（查英文表达）"></textarea>
       </div>

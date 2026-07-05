@@ -3,7 +3,7 @@
 
 import {
   CORS, OPTIONS_HEADERS, json, callModel,
-  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache,
+  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
 } from "../_lib/translate-core.js";
 
 const SYSTEM = "你是英语学习助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 example 例句中，把目标英文表达用 [[ ]] 括起来，只括英文部分。";
@@ -37,14 +37,15 @@ async function handle({ request, env }) {
 
   // 中文无空格，无法用空格判词/句；用长度粗略分流（仅用于缓存键归类）
   const route = text.length <= 8 ? "word" : "sentence";
+  const model = resolveModel(body.model, env);
 
-  const cacheKey = buildCacheKey("zh2en", route, text);
+  const cacheKey = buildCacheKey("zh2en", route, text, model);
   const cached = await readCache(cacheKey);
   if (cached) {
     return json({ ...cached, input: text, _cached: true }, 200, CORS);
   }
 
-  const upstream = await callModel(zhPrompt(text), env, SYSTEM);
+  const upstream = await callModel(zhPrompt(text), env, SYSTEM, model);
   if (!upstream.ok) {
     const errText = await upstream.text();
     return json({ error: "upstream_error", status: upstream.status, detail: errText }, 502, CORS);
@@ -64,7 +65,7 @@ async function handle({ request, env }) {
   }
 
   parsed = cleanCJKSpaces(parsed);
-  const result = { direction: "zh2en", input: text, ...parsed };
+  const result = { direction: "zh2en", input: text, ...parsed, model };
 
   writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
 

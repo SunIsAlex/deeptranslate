@@ -1,5 +1,8 @@
 // 入口控制器：提交流程、加载日志、路由恢复、复制、事件绑定
-import { inputEl, modeEl, submitBtn, statusEl, outputEl, copyBtn } from "./js/dom.js";
+import {
+  inputEl, modeEl, grammarAnalysisEl, modelEl,
+  submitBtn, statusEl, outputEl, copyBtn,
+} from "./js/dom.js";
 import { detectDirection, translate } from "./js/api.js";
 import { render, renderStreaming } from "./js/render.js";
 
@@ -37,8 +40,13 @@ async function handleSubmit() {
   setStatus("");
 
   const direction = detectDirection(text);
+  const settings = {
+    grammarAnalysis: grammarAnalysisEl.checked,
+    model: modelEl.value,
+  };
   setStage(`> input: "${truncate(text, 50)}"`);
   setStage(`> direction: ${direction}  |  length: ${text.length} chars`);
+  setStage(`> model: ${settings.model}  |  grammar: ${settings.grammarAnalysis ? "ON" : "OFF"}`);
 
   try {
     const partial = { input: text, translation: "", examples: [] };
@@ -57,6 +65,7 @@ async function handleSubmit() {
       modeEl.value,
       setStage,
       onStreamEvent,
+      settings,
     );
 
     if (!res.ok) {
