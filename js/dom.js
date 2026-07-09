@@ -12,6 +12,17 @@ export const followUpEl = document.getElementById("follow-up");
 export const followUpThreadEl = document.getElementById("follow-up-thread");
 export const followUpInputEl = document.getElementById("follow-up-input");
 export const followUpBtn = document.getElementById("follow-up-btn");
+export const vocabEl = document.getElementById("vocab");
+export const vocabCountEl = document.getElementById("vocab-count");
+export const vocabCurrentEl = document.getElementById("vocab-current");
+export const vocabCurrentTermEl = document.getElementById("vocab-current-term");
+export const vocabCurrentMetaEl = document.getElementById("vocab-current-meta");
+export const addCurrentVocabBtn = document.getElementById("add-current-vocab");
+export const suggestVocabBtn = document.getElementById("suggest-vocab");
+export const vocabSuggestStatusEl = document.getElementById("vocab-suggest-status");
+export const vocabSuggestionsEl = document.getElementById("vocab-suggestions");
+export const vocabListEl = document.getElementById("vocab-list");
+export const clearVocabBtn = document.getElementById("clear-vocab");
 
 // 转义,防 XSS(因为高亮要用 innerHTML)
 export function escapeHtml(s) {

@@ -15,6 +15,7 @@
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
 - **上下文追问**：基于当前翻译结果继续询问用法、语法和自然度，AI 以用户提问所用语言流式回答
+- **本地生词本**：可把当前查询的单词/短语保存到浏览器本地，并联想添加近义词、反义词、词族和相关短语
 - **Markdown 回答**：追问回答复用内置 marked.js 增量渲染，并通过 HTML 白名单过滤危险内容
 - **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
 - **KV 缓存**：重复查询毫秒级返回
@@ -38,6 +39,7 @@
 │   ├── dom.js                 # DOM 元素引用与通用构建工具
 │   ├── highlight.js           # 例句 [[ ]] 高亮、句法成分着色
 │   ├── render.js              # 各类型结果渲染（word/phrase/sentence/zh）
+│   ├── vocabulary.js          # 本地生词本读写与去重
 │   └── api.js                 # 翻译方向判断与后端请求
 ├── edgeone.json               # 路由 rewrite 配置
 ├── edge-functions/
@@ -45,6 +47,7 @@
     │   └── translate-core.js  # 公共工具：CORS、调模型、缓存、清洗
     └── api/
         ├── translate.js       # 英译中接口
+        ├── related-words.js   # 结构化联想词接口
         ├── translate-cache.js # Node Function 与 Edge KV 之间的缓存桥接
         └── translate-zh.js    # 中译英接口
 └── node-functions/
@@ -129,6 +132,19 @@ edgeone pages dev         # 本地起调试服务
 响应类型为 `text/event-stream`，依次发送 `meta`、多个 `delta`、`result` 和 `done`。
 回答会参考当前完整翻译结果，并使用与当前问题相同的语言。前端开始新翻译时会清空追问记录。
 
+### POST /api/related-words（生词本联想）
+
+```json
+{
+  "input": "happy",
+  "context": { "input": "happy", "translation": "快乐的" },
+  "model": "deepseek-v4-flash"
+}
+```
+
+返回结构化 `items` 数组，供前端一键加入本地生词本。`relation` 可能为
+`synonym` / `antonym` / `word_family` / `phrase` / `related`。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -141,6 +157,7 @@ edgeone pages dev         # 本地起调试服务
 | `/api/translate` | 英译中接口 |
 | `/api/translate-stream` | 英译中 SSE 流式接口 |
 | `/api/follow-up` | 基于当前翻译结果的流式追问接口 |
+| `/api/related-words` | 生词本联想词接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。

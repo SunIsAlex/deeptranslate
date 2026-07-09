@@ -3,11 +3,23 @@ import {
   inputEl, modeEl, grammarAnalysisEl, modelEl,
   submitBtn, statusEl, outputEl, copyBtn,
   followUpEl, followUpThreadEl, followUpInputEl, followUpBtn,
+  vocabCountEl, vocabCurrentEl, vocabCurrentTermEl, vocabCurrentMetaEl,
+  addCurrentVocabBtn, suggestVocabBtn, vocabSuggestStatusEl,
+  vocabSuggestionsEl, vocabListEl, clearVocabBtn,
 } from "./js/dom.js";
-import { askFollowUp, detectDirection, translate } from "./js/api.js";
+import { askFollowUp, detectDirection, fetchRelatedWords, translate } from "./js/api.js";
 import { render, renderMarkdown, renderStreaming } from "./js/render.js";
+import {
+  clearVocabulary,
+  hasVocabularyEntry,
+  loadVocabulary,
+  normalizeTerm,
+  removeVocabularyEntry,
+  upsertVocabularyEntry,
+} from "./js/vocabulary.js";
 
 let currentTranslation = null;
+let currentVocabCandidate = null;
 let followUpHistory = [];
 let followUpController = null;
 
@@ -42,6 +54,15 @@ function resetFollowUp() {
   followUpInputEl.disabled = false;
 }
 
+function resetVocabCurrent() {
+  currentVocabCandidate = null;
+  vocabCurrentEl.hidden = true;
+  vocabCurrentTermEl.textContent = "";
+  vocabCurrentMetaEl.textContent = "";
+  vocabSuggestStatusEl.textContent = "";
+  vocabSuggestionsEl.innerHTML = "";
+}
+
 function followUpContext(data) {
   const {
     direction, input, type, translation,
@@ -66,6 +87,148 @@ function appendFollowUpMessage(role, text = "") {
   return message;
 }
 
+function relationLabel(value) {
+  const labels = {
+    synonym: "近义",
+    antonym: "反义",
+    related: "相关",
+    word_family: "词族",
+    phrase: "短语",
+  };
+  return labels[value] || "相关";
+}
+
+function vocabNote(item) {
+  const parts = [];
+  if (item.relation) parts.push(relationLabel(item.relation));
+  if (item.translation || item.note) parts.push(item.translation || item.note);
+  return parts.join(" · ");
+}
+
+function getVocabCandidate(data) {
+  if (data.direction !== "en2zh" || !["word", "phrase"].includes(data.type)) return null;
+  const term = normalizeTerm(data.input);
+  if (!term || term.length > 80) return null;
+
+  const senses = Array.isArray(data.senses)
+    ? data.senses.map((sense) => sense?.zh).filter(Boolean)
+    : [];
+  const translation = senses.length ? senses.slice(0, 3).join("；") : data.translation || "";
+  return {
+    term,
+    translation,
+    note: data.analysis?.pos || "",
+    source: "search",
+  };
+}
+
+function setCurrentVocabCandidate(data) {
+  currentVocabCandidate = getVocabCandidate(data);
+  vocabSuggestionsEl.innerHTML = "";
+  vocabSuggestStatusEl.textContent = "";
+
+  if (!currentVocabCandidate) {
+    vocabCurrentEl.hidden = true;
+    return;
+  }
+
+  vocabCurrentEl.hidden = false;
+  vocabCurrentTermEl.textContent = currentVocabCandidate.term;
+  vocabCurrentMetaEl.textContent = currentVocabCandidate.translation || currentVocabCandidate.note;
+  refreshCurrentVocabButton();
+}
+
+function refreshCurrentVocabButton() {
+  if (!currentVocabCandidate) return;
+  const saved = hasVocabularyEntry(currentVocabCandidate.term);
+  addCurrentVocabBtn.textContent = saved ? "已加入" : "加入";
+  addCurrentVocabBtn.disabled = saved;
+}
+
+function renderVocabulary() {
+  const items = loadVocabulary();
+  vocabCountEl.textContent = `${items.length} 个`;
+  clearVocabBtn.disabled = items.length === 0;
+  vocabListEl.innerHTML = "";
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "vocab-item";
+
+    const info = document.createElement("div");
+    info.className = "vocab-info";
+    const term = document.createElement("strong");
+    term.textContent = item.term;
+    const note = document.createElement("div");
+    note.className = "vocab-note";
+    note.textContent = vocabNote(item);
+    info.append(term, note);
+
+    const actions = document.createElement("div");
+    actions.className = "vocab-actions";
+    const searchBtn = document.createElement("button");
+    searchBtn.className = "text-btn";
+    searchBtn.type = "button";
+    searchBtn.textContent = "查询";
+    searchBtn.addEventListener("click", () => {
+      inputEl.value = item.term;
+      modeEl.value = "word";
+      handleSubmit();
+    });
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "text-btn";
+    removeBtn.type = "button";
+    removeBtn.textContent = "删除";
+    removeBtn.addEventListener("click", () => {
+      removeVocabularyEntry(item.term);
+      renderVocabulary();
+      refreshCurrentVocabButton();
+    });
+    actions.append(searchBtn, removeBtn);
+
+    row.append(info, actions);
+    vocabListEl.appendChild(row);
+  });
+}
+
+function renderRelatedSuggestions(items) {
+  vocabSuggestionsEl.innerHTML = "";
+  const normalizedItems = items
+    .map((item) => ({
+      term: normalizeTerm(item.term),
+      relation: normalizeTerm(item.relation),
+      note: normalizeTerm(item.note),
+      translation: normalizeTerm(item.translation),
+    }))
+    .filter((item) => item.term)
+    .filter((item, index, all) =>
+      all.findIndex((other) => other.term.toLowerCase() === item.term.toLowerCase()) === index
+    );
+
+  normalizedItems.forEach((item) => {
+    const chip = document.createElement("button");
+    chip.className = "vocab-chip";
+    chip.type = "button";
+    const saved = hasVocabularyEntry(item.term);
+    chip.textContent = `${item.term} · ${relationLabel(item.relation)}`;
+    if (item.note || item.translation) chip.title = item.note || item.translation;
+    chip.disabled = saved;
+    if (saved) chip.textContent += " ✓";
+    chip.addEventListener("click", () => {
+      upsertVocabularyEntry({
+        ...item,
+        relatedTo: currentVocabCandidate?.term || "",
+        source: "related",
+      });
+      chip.disabled = true;
+      chip.textContent = `${item.term} · ${relationLabel(item.relation)} ✓`;
+      renderVocabulary();
+      refreshCurrentVocabButton();
+    });
+    vocabSuggestionsEl.appendChild(chip);
+  });
+}
+
 // ── 提交流程 ───────────────────────────────────
 async function handleSubmit() {
   const text = inputEl.value.trim();
@@ -76,6 +239,7 @@ async function handleSubmit() {
 
   outputEl.innerHTML = "";
   resetFollowUp();
+  resetVocabCurrent();
   submitBtn.disabled = true;
   copyBtn.hidden = true;
   setStatus("");
@@ -106,6 +270,7 @@ async function handleSubmit() {
         render(data);
         setStatus(data._cached ? "缓存" : "");
         currentTranslation = followUpContext(data);
+        setCurrentVocabCandidate(data);
         followUpEl.hidden = false;
       }
     };
@@ -126,12 +291,11 @@ async function handleSubmit() {
     setStage(`> type: ${typeLabel}  |  cached: ${data._cached ? "HIT" : "MISS"}  |  ${total}ms`);
     setStage(`> rendering…`);
 
-
-
     setStatus(data._cached ? "缓存" : "");
     copyBtn.hidden = false;
     render(data);
     currentTranslation = followUpContext(data);
+    setCurrentVocabCandidate(data);
     followUpEl.hidden = false;
     updateUrl(data, text);
   } catch (err) {
@@ -214,6 +378,43 @@ function updateUrl(data, text) {
 submitBtn.addEventListener("click", handleSubmit);
 followUpBtn.addEventListener("click", handleFollowUp);
 
+addCurrentVocabBtn.addEventListener("click", () => {
+  if (!currentVocabCandidate) return;
+  upsertVocabularyEntry(currentVocabCandidate);
+  renderVocabulary();
+  refreshCurrentVocabButton();
+});
+
+suggestVocabBtn.addEventListener("click", async () => {
+  if (!currentVocabCandidate || !currentTranslation) return;
+  suggestVocabBtn.disabled = true;
+  vocabSuggestStatusEl.textContent = "联想中…";
+  vocabSuggestionsEl.innerHTML = "";
+
+  try {
+    const items = await fetchRelatedWords({
+      input: currentVocabCandidate.term,
+      context: currentTranslation,
+      model: modelEl.value,
+    });
+    renderRelatedSuggestions(items);
+    vocabSuggestStatusEl.textContent = items.length ? "" : "无结果";
+  } catch (error) {
+    vocabSuggestStatusEl.textContent = error.message || "联想失败";
+  } finally {
+    suggestVocabBtn.disabled = false;
+  }
+});
+
+clearVocabBtn.addEventListener("click", () => {
+  if (!loadVocabulary().length) return;
+  clearVocabulary();
+  renderVocabulary();
+  refreshCurrentVocabButton();
+  renderRelatedSuggestions([]);
+  vocabSuggestStatusEl.textContent = "";
+});
+
 inputEl.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
     e.preventDefault();
@@ -241,6 +442,8 @@ copyBtn.addEventListener("click", async () => {
     setStatus("复制失败");
   }
 });
+
+renderVocabulary();
 
 // ── 页面加载时读取 URL 路径，恢复查询 ───────────
 (function restoreFromUrl() {

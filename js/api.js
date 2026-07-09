@@ -158,6 +158,28 @@ export async function askFollowUp({
   return answer;
 }
 
+export async function fetchRelatedWords({ input, context, model }) {
+  const res = await fetch("/api/related-words", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input, context, model }),
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // 错误响应可能不是 JSON。
+  }
+
+  if (!res.ok) {
+    const detail = data?.message || data?.detail || data?.error || `联想失败 ${res.status}`;
+    throw new Error(detail);
+  }
+
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
 async function readEventStream(res, onEvent) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
