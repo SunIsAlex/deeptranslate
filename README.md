@@ -15,6 +15,8 @@
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
 - **上下文追问**：基于当前翻译结果继续询问用法、语法和自然度，AI 以用户提问所用语言流式回答
+- **英美音跟读**：词条、译文和例句可用浏览器原生语音合成播放美式或英式发音
+- **练习模式**：基于当前翻译一键生成填空、中译英或选择题，作答后显示参考答案与解析
 - **本地生词本**：可把当前查询的单词/短语保存到浏览器本地，并联想添加近义词、反义词、词族和相关短语
 - **Markdown 回答**：追问回答复用内置 marked.js 增量渲染，并通过 HTML 白名单过滤危险内容
 - **句法成分着色**：句子按主谓宾定状补等成分上色，鼠标悬停显示说明
@@ -39,6 +41,7 @@
 │   ├── dom.js                 # DOM 元素引用与通用构建工具
 │   ├── highlight.js           # 例句 [[ ]] 高亮、句法成分着色
 │   ├── render.js              # 各类型结果渲染（word/phrase/sentence/zh）
+│   ├── speech.js              # 浏览器原生英美音朗读
 │   ├── vocabulary.js          # 本地生词本读写与去重
 │   └── api.js                 # 翻译方向判断与后端请求
 ├── edgeone.json               # 路由 rewrite 配置
@@ -48,6 +51,7 @@
     └── api/
         ├── translate.js       # 英译中接口
         ├── related-words.js   # 结构化联想词接口
+        ├── practice.js        # 结构化练习题接口
         ├── translate-cache.js # Node Function 与 Edge KV 之间的缓存桥接
         └── translate-zh.js    # 中译英接口
 └── node-functions/
@@ -145,6 +149,18 @@ edgeone pages dev         # 本地起调试服务
 返回结构化 `items` 数组，供前端一键加入本地生词本。`relation` 可能为
 `synonym` / `antonym` / `word_family` / `phrase` / `related`。
 
+### POST /api/practice（练习模式）
+
+```json
+{
+  "kind": "cloze",
+  "context": { "input": "happy", "translation": "快乐的" },
+  "model": "deepseek-v4-flash"
+}
+```
+
+`kind` 可选 `auto` / `cloze` / `translate` / `choice`。接口基于当前完整翻译结果返回一题结构化练习，包含题干、可选项（仅选择题）、参考答案、可接受答案与中文解析。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -158,6 +174,7 @@ edgeone pages dev         # 本地起调试服务
 | `/api/translate-stream` | 英译中 SSE 流式接口 |
 | `/api/follow-up` | 基于当前翻译结果的流式追问接口 |
 | `/api/related-words` | 生词本联想词接口 |
+| `/api/practice` | 结构化练习题接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。

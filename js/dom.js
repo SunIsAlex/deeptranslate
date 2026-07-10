@@ -23,6 +23,11 @@ export const vocabSuggestStatusEl = document.getElementById("vocab-suggest-statu
 export const vocabSuggestionsEl = document.getElementById("vocab-suggestions");
 export const vocabListEl = document.getElementById("vocab-list");
 export const clearVocabBtn = document.getElementById("clear-vocab");
+export const practiceEl = document.getElementById("practice");
+export const practiceKindEl = document.getElementById("practice-kind");
+export const generatePracticeBtn = document.getElementById("generate-practice");
+export const practiceBodyEl = document.getElementById("practice-body");
+export const practiceStatusEl = document.getElementById("practice-status");
 
 // 转义,防 XSS(因为高亮要用 innerHTML)
 export function escapeHtml(s) {

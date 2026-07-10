@@ -180,6 +180,28 @@ export async function fetchRelatedWords({ input, context, model }) {
   return Array.isArray(data?.items) ? data.items : [];
 }
 
+export async function fetchPractice({ context, kind, model }) {
+  const res = await fetch("/api/practice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ context, kind, model }),
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // 错误响应可能不是 JSON。
+  }
+
+  if (!res.ok) {
+    const detail = data?.message || data?.detail || data?.error || `练习生成失败 ${res.status}`;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
 async function readEventStream(res, onEvent) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

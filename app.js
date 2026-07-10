@@ -6,8 +6,9 @@ import {
   vocabCountEl, vocabCurrentEl, vocabCurrentTermEl, vocabCurrentMetaEl,
   addCurrentVocabBtn, suggestVocabBtn, vocabSuggestStatusEl,
   vocabSuggestionsEl, vocabListEl, clearVocabBtn,
+  practiceEl, practiceKindEl, generatePracticeBtn, practiceBodyEl, practiceStatusEl,
 } from "./js/dom.js";
-import { askFollowUp, detectDirection, fetchRelatedWords, translate } from "./js/api.js";
+import { askFollowUp, detectDirection, fetchPractice, fetchRelatedWords, translate } from "./js/api.js";
 import { render, renderMarkdown, renderStreaming } from "./js/render.js";
 import {
   clearVocabulary,
@@ -22,6 +23,7 @@ let currentTranslation = null;
 let currentVocabCandidate = null;
 let followUpHistory = [];
 let followUpController = null;
+let currentPractice = null;
 
 // ── 加载日志与状态 ──────────────────────────────
 function setStage(line) {
@@ -61,6 +63,110 @@ function resetVocabCurrent() {
   vocabCurrentMetaEl.textContent = "";
   vocabSuggestStatusEl.textContent = "";
   vocabSuggestionsEl.innerHTML = "";
+}
+
+function resetPractice() {
+  currentPractice = null;
+  practiceEl.hidden = true;
+  practiceBodyEl.innerHTML = "";
+  practiceStatusEl.textContent = "";
+  generatePracticeBtn.disabled = false;
+  generatePracticeBtn.textContent = "生成练习";
+}
+
+function preparePractice() {
+  currentPractice = null;
+  practiceEl.hidden = false;
+  practiceStatusEl.textContent = "";
+  practiceBodyEl.innerHTML = '<p class="practice-empty">尚未生成练习</p>';
+  generatePracticeBtn.disabled = false;
+  generatePracticeBtn.textContent = "生成练习";
+}
+
+function renderPractice(practice) {
+  currentPractice = practice;
+  practiceBodyEl.innerHTML = "";
+
+  const prompt = document.createElement("p");
+  prompt.className = "practice-prompt";
+  prompt.textContent = practice.prompt;
+  const question = document.createElement("p");
+  question.className = "practice-question";
+  question.textContent = practice.question;
+  practiceBodyEl.append(prompt, question);
+
+  if (practice.kind === "choice") {
+    const choices = document.createElement("div");
+    choices.className = "practice-choices";
+    choices.setAttribute("role", "radiogroup");
+    choices.setAttribute("aria-label", "选择答案");
+    practice.choices.forEach((choice, index) => {
+      const option = document.createElement("label");
+      option.className = "practice-choice";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "practice-answer";
+      input.value = choice;
+      input.id = `practice-choice-${index}`;
+      const text = document.createElement("span");
+      text.textContent = choice;
+      option.append(input, text);
+      choices.appendChild(option);
+    });
+    practiceBodyEl.appendChild(choices);
+  } else {
+    const answerInput = document.createElement("input");
+    answerInput.className = "practice-answer-input";
+    answerInput.type = "text";
+    answerInput.autocomplete = "off";
+    answerInput.placeholder = "输入你的答案";
+    answerInput.setAttribute("aria-label", "你的答案");
+    practiceBodyEl.appendChild(answerInput);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "practice-actions";
+  const checkBtn = document.createElement("button");
+  checkBtn.type = "button";
+  checkBtn.className = "secondary-btn";
+  checkBtn.textContent = "检查答案";
+  checkBtn.addEventListener("click", checkPracticeAnswer);
+  actions.appendChild(checkBtn);
+  practiceBodyEl.appendChild(actions);
+}
+
+function checkPracticeAnswer() {
+  if (!currentPractice) return;
+  const answer = currentPractice.kind === "choice"
+    ? practiceBodyEl.querySelector('input[name="practice-answer"]:checked')?.value || ""
+    : practiceBodyEl.querySelector(".practice-answer-input")?.value.trim() || "";
+  if (!answer) {
+    practiceStatusEl.textContent = "请选择或输入答案";
+    return;
+  }
+
+  const accepted = currentPractice.acceptedAnswers || [currentPractice.answer];
+  const correct = accepted.some((item) => normalizePracticeAnswer(item) === normalizePracticeAnswer(answer));
+  const oldFeedback = practiceBodyEl.querySelector(".practice-feedback");
+  oldFeedback?.remove();
+
+  const feedback = document.createElement("div");
+  feedback.className = `practice-feedback ${correct ? "is-correct" : "is-reference"}`;
+  const title = document.createElement("strong");
+  title.textContent = correct ? "回答正确" : "参考答案";
+  const answerText = document.createElement("p");
+  answerText.textContent = currentPractice.answer;
+  const explanation = document.createElement("p");
+  explanation.textContent = currentPractice.explanation;
+  feedback.append(title, answerText, explanation);
+  practiceBodyEl.appendChild(feedback);
+  practiceStatusEl.textContent = "";
+}
+
+function normalizePracticeAnswer(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, "");
 }
 
 function followUpContext(data) {
@@ -240,6 +346,7 @@ async function handleSubmit() {
   outputEl.innerHTML = "";
   resetFollowUp();
   resetVocabCurrent();
+  resetPractice();
   submitBtn.disabled = true;
   copyBtn.hidden = true;
   setStatus("");
@@ -272,6 +379,7 @@ async function handleSubmit() {
         currentTranslation = followUpContext(data);
         setCurrentVocabCandidate(data);
         followUpEl.hidden = false;
+        preparePractice();
       }
     };
     const { res, data, total } = await translate(
@@ -297,6 +405,7 @@ async function handleSubmit() {
     currentTranslation = followUpContext(data);
     setCurrentVocabCandidate(data);
     followUpEl.hidden = false;
+    preparePractice();
     updateUrl(data, text);
   } catch (err) {
     setStage(`> ERROR: ${err.message}`);
@@ -377,6 +486,27 @@ function updateUrl(data, text) {
 // ── 事件绑定 ───────────────────────────────────
 submitBtn.addEventListener("click", handleSubmit);
 followUpBtn.addEventListener("click", handleFollowUp);
+
+generatePracticeBtn.addEventListener("click", async () => {
+  if (!currentTranslation) return;
+  generatePracticeBtn.disabled = true;
+  generatePracticeBtn.textContent = "生成中…";
+  practiceStatusEl.textContent = "";
+
+  try {
+    const practice = await fetchPractice({
+      context: currentTranslation,
+      kind: practiceKindEl.value,
+      model: modelEl.value,
+    });
+    renderPractice(practice);
+  } catch (error) {
+    practiceStatusEl.textContent = error.message || "练习生成失败";
+  } finally {
+    generatePracticeBtn.disabled = false;
+    generatePracticeBtn.textContent = "换一题";
+  }
+});
 
 addCurrentVocabBtn.addEventListener("click", () => {
   if (!currentVocabCandidate) return;

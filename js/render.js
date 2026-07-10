@@ -1,6 +1,7 @@
 // 各类型翻译结果的渲染
 import { el, textLi, section, outputEl } from "./dom.js";
 import { highlightExample, renderHighlightedSentence } from "./highlight.js";
+import { canSpeak, speakEnglish } from "./speech.js";
 
 // 渲染入口：按 direction / type 分发到对应渲染器
 export function render(data) {
@@ -19,7 +20,7 @@ export function render(data) {
 export function renderStreaming({ input, translation, senses, examples }) {
   const wrap = document.createElement("div");
   wrap.className = "result streaming-result";
-  wrap.appendChild(el("h3", "", input));
+  wrap.appendChild(createResultHeading(input));
   if (translation) wrap.appendChild(renderSenses(senses, translation));
 
   const completedExamples = (examples || []).filter(Boolean);
@@ -27,11 +28,7 @@ export function renderStreaming({ input, translation, senses, examples }) {
     const sec = document.createElement("section");
     sec.appendChild(el("h4", "", "例句"));
     const ul = document.createElement("ul");
-    completedExamples.forEach((example) => {
-      const li = document.createElement("li");
-      li.innerHTML = highlightExample(example, input);
-      ul.appendChild(li);
-    });
+    completedExamples.forEach((example) => ul.appendChild(createExampleItem(example, input)));
     sec.appendChild(ul);
     wrap.appendChild(sec);
   }
@@ -120,7 +117,7 @@ function renderWord(data) {
     pos.textContent = analysis.pos;
     h.appendChild(pos);
   }
-  frag.appendChild(h);
+  frag.appendChild(createResultHeading(input, h));
 
   frag.appendChild(renderSenses(senses, translation));
   if (analysis?.fullForm) {
@@ -148,11 +145,7 @@ function renderWord(data) {
     const sec = document.createElement("section");
     sec.appendChild(el("h4", "", "例句"));
     const ul = document.createElement("ul");
-    analysis.examples.forEach((ex) => {
-      const li = document.createElement("li");
-      li.innerHTML = highlightExample(ex, input, analysis.inflections);
-      ul.appendChild(li);
-    });
+    analysis.examples.forEach((ex) => ul.appendChild(createExampleItem(ex, input, analysis.inflections)));
     sec.appendChild(ul);
     frag.appendChild(sec);
   }
@@ -172,7 +165,7 @@ function renderPhrase(data) {
     pos.textContent = analysis.pos;
     h.appendChild(pos);
   }
-  frag.appendChild(h);
+  frag.appendChild(createResultHeading(input, h));
 
   frag.appendChild(renderSenses(senses, translation));
 
@@ -184,11 +177,7 @@ function renderPhrase(data) {
     const sec = document.createElement("section");
     sec.appendChild(el("h4", "", "例句"));
     const ul = document.createElement("ul");
-    analysis.examples.forEach((ex) => {
-      const li = document.createElement("li");
-      li.innerHTML = highlightExample(ex, input);
-      ul.appendChild(li);
-    });
+    analysis.examples.forEach((ex) => ul.appendChild(createExampleItem(ex, input)));
     sec.appendChild(ul);
     frag.appendChild(sec);
   }
@@ -225,10 +214,7 @@ function renderZh(data) {
   // 句子：单一译法，简洁显示，不重复
   if (type === "sentence" && translations?.length) {
     const t = translations[0];
-    const en = document.createElement("div");
-    en.className = "translation";
-    en.innerHTML = highlightExample(t.en || "");
-    frag.appendChild(en);
+    frag.appendChild(createSpokenText(t.en || "", "translation"));
     return frag;
   }
 
@@ -237,16 +223,10 @@ function renderZh(data) {
     translations.forEach((t) => {
       const sec = document.createElement("section");
       sec.className = "zh-item";
-      const en = document.createElement("div");
-      en.className = "zh-en";
-      en.innerHTML = highlightExample(t.en || "");
-      sec.appendChild(en);
+      sec.appendChild(createSpokenText(t.en || "", "zh-en"));
       if (t.note && t.note.trim()) sec.appendChild(el("div", "zh-note", t.note));
       if (t.example) {
-        const ex = document.createElement("div");
-        ex.className = "zh-example";
-        ex.innerHTML = highlightExample(t.example, t.en);
-        sec.appendChild(ex);
+        sec.appendChild(createSpokenText(t.example, "zh-example", t.en));
       }
       frag.appendChild(sec);
     });
@@ -258,7 +238,7 @@ function renderSentence(data) {
   const { input, translation, analysis } = data;
   const frag = document.createDocumentFragment();
 
-  frag.appendChild(el("h3", "", input));
+  frag.appendChild(createResultHeading(input));
   frag.appendChild(el("div", "translation", translation));
 
   if (analysis?.structure) {
@@ -284,4 +264,51 @@ function renderSentence(data) {
   }
 
   return frag;
+}
+
+function createResultHeading(text, heading = null) {
+  const row = document.createElement("div");
+  row.className = "result-heading";
+  row.appendChild(heading || el("h3", "", text));
+  row.appendChild(createSpeechControls(text));
+  return row;
+}
+
+function createSpokenText(text, className, target, inflections) {
+  const row = document.createElement("div");
+  row.className = `${className} spoken-text`;
+  const content = document.createElement("span");
+  content.innerHTML = highlightExample(text, target, inflections);
+  row.append(content, createSpeechControls(text));
+  return row;
+}
+
+function createExampleItem(text, target, inflections) {
+  const item = document.createElement("li");
+  item.className = "example-item";
+  const content = document.createElement("span");
+  content.innerHTML = highlightExample(text, target, inflections);
+  item.append(content, createSpeechControls(text));
+  return item;
+}
+
+function createSpeechControls(text) {
+  const controls = document.createElement("span");
+  controls.className = "speech-controls";
+  if (!canSpeak() || !String(text || "").trim()) return controls;
+
+  [
+    ["us", "US", "播放美式发音"],
+    ["uk", "UK", "播放英式发音"],
+  ].forEach(([variant, label, title]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "speech-btn";
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.addEventListener("click", () => speakEnglish(text, variant));
+    controls.appendChild(button);
+  });
+  return controls;
 }

@@ -822,7 +822,7 @@
   .copy-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 
   .lower-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 20px; }
-  .vocab, .follow-up { min-width: 0; margin: 0; padding: 18px 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 1px 2px rgba(60, 64, 67, .06); }
+  .vocab, .practice, .follow-up { min-width: 0; margin: 0; padding: 18px 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 1px 2px rgba(60, 64, 67, .06); }
   .follow-up { grid-column: 1 / -1; }
   .vocab-header { margin-bottom: 10px; }
   .vocab-title h2, .follow-up-title { font-size: 15px; font-weight: 500; }
@@ -849,6 +849,42 @@
   textarea.follow-up-input { min-height: 46px; padding: 10px 12px; border-radius: 4px; font-size: 15px; }
   .follow-up-btn { padding: 9px 18px; border-radius: 4px; letter-spacing: 0; }
 
+  .practice-header, .practice-toolbar, .practice-actions, .result-heading, .spoken-text, .example-item, .speech-controls {
+    display: flex;
+    align-items: center;
+  }
+  .practice-header { justify-content: space-between; gap: 12px; }
+  .practice-header h2 { margin: 0; font-size: 15px; font-weight: 500; }
+  .practice-toolbar { gap: 6px; }
+  .practice-kind { padding: 6px 8px; border-radius: 4px; color: var(--text-secondary); font-size: 13px; }
+  .practice-kind:hover { background: var(--surface-muted); }
+  .practice-body { margin-top: 16px; }
+  .practice-empty { margin: 0; color: var(--text-secondary); }
+  .practice-prompt { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; }
+  .practice-question { margin: 0; color: var(--text); font-size: 18px; line-height: 1.55; white-space: pre-wrap; }
+  .practice-choices { display: grid; gap: 8px; margin-top: 14px; }
+  .practice-choice { display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+  .practice-choice:hover { border-color: var(--blue); background: #f8fbff; }
+  .practice-choice input { accent-color: var(--blue); }
+  .practice-answer-input { width: 100%; height: 42px; margin-top: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text); font: inherit; }
+  .practice-answer-input:focus { outline: 2px solid var(--blue-soft); border-color: var(--blue); }
+  .practice-actions { justify-content: flex-end; margin-top: 14px; }
+  .practice-feedback { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--border); background: var(--bg-soft); }
+  .practice-feedback.is-correct { border-color: #188038; background: #e6f4ea; }
+  .practice-feedback.is-reference { border-color: #f9ab00; background: #fef7e0; }
+  .practice-feedback strong, .practice-feedback p { display: block; margin: 0; }
+  .practice-feedback p + p { margin-top: 5px; color: var(--text-secondary); }
+  .practice-status { min-height: 18px; margin-top: 10px; color: #b3261e; font-size: 13px; }
+
+  .result-heading { justify-content: space-between; gap: 10px; }
+  .result-heading h3 { margin-bottom: 12px; }
+  .speech-controls { flex: 0 0 auto; gap: 4px; }
+  .speech-btn { min-width: 30px; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 600; letter-spacing: 0; }
+  .speech-btn:hover { border-color: var(--border); background: var(--surface-muted); color: var(--blue); }
+  .spoken-text, .example-item { justify-content: space-between; gap: 10px; }
+  .spoken-text > span, .example-item > span { min-width: 0; }
+  .example-item { padding-right: 0; }
+
   .result h3 { font-size: 23px; line-height: 1.35; }
   .result .translation { color: #174ea6; font-size: 20px; line-height: 1.55; }
   .result .sense-list { padding-left: 22px; }
@@ -869,6 +905,8 @@
     textarea#input-text, .output-placeholder { font-size: 20px; }
     textarea#input-text, .output { min-height: 155px; }
     .follow-up { grid-column: auto; }
+    .practice-header { align-items: flex-start; flex-direction: column; }
+    .practice-toolbar { width: 100%; justify-content: space-between; }
     .vocab-header, .vocab-current, .vocab-item { align-items: stretch; flex-direction: column; }
     .vocab-actions { flex-wrap: wrap; }
   }
@@ -968,6 +1006,22 @@
       </div>
       <div class="vocab-suggestions" id="vocab-suggestions" aria-live="polite"></div>
       <div class="vocab-list" id="vocab-list"></div>
+      </section>
+      <section class="practice" id="practice" aria-labelledby="practice-title" hidden>
+        <div class="practice-header">
+          <h2 id="practice-title">练习模式</h2>
+          <div class="practice-toolbar">
+            <select class="practice-kind" id="practice-kind" aria-label="练习题型">
+              <option value="auto">智能出题</option>
+              <option value="cloze">填空题</option>
+              <option value="translate">中译英</option>
+              <option value="choice">选择题</option>
+            </select>
+            <button class="text-btn" id="generate-practice" type="button">生成练习</button>
+          </div>
+        </div>
+        <div class="practice-body" id="practice-body" aria-live="polite"></div>
+        <div class="practice-status" id="practice-status" aria-live="polite"></div>
       </section>
       <section class="follow-up" id="follow-up" aria-labelledby="follow-up-title" hidden>
       <h2 class="follow-up-title" id="follow-up-title">追问当前翻译</h2>
