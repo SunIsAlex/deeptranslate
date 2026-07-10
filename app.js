@@ -432,11 +432,13 @@ followUpInputEl.addEventListener("keydown", (e) => {
 copyBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(`https://deeptranslate.sunisalex.org${location.pathname}`);
-    copyBtn.textContent = "✓";
     copyBtn.classList.add("copied");
+    copyBtn.title = "已复制";
+    copyBtn.setAttribute("aria-label", "分享链接已复制");
     setTimeout(() => {
-      copyBtn.textContent = "🔗";
       copyBtn.classList.remove("copied");
+      copyBtn.title = "复制分享链接";
+      copyBtn.setAttribute("aria-label", "复制分享链接");
     }, 1500);
   } catch {
     setStatus("复制失败");

@@ -627,12 +627,263 @@
   font-style: italic;
 }
 </style>
+<style>
+  /* Translation workspace, inspired by the clarity of Google Translate. */
+  :root {
+    --blue: #1a73e8;
+    --blue-hover: #185abc;
+    --blue-soft: #e8f0fe;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --bg: #ffffff;
+    --bg-soft: #f8fafd;
+    --surface-muted: #f1f3f4;
+  }
+
+  html, body { min-height: 100%; background: var(--bg-soft); }
+  body { font-size: 14px; }
+
+  .site-header {
+    height: 64px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0;
+    text-decoration: none;
+  }
+  .brand-mark {
+    display: grid;
+    grid-template-columns: repeat(2, 8px);
+    grid-template-rows: repeat(2, 8px);
+    gap: 2px;
+    width: 18px;
+    height: 18px;
+  }
+  .brand-mark span { border-radius: 2px; }
+  .brand-mark span:nth-child(1) { background: #4285f4; }
+  .brand-mark span:nth-child(2) { background: #34a853; }
+  .brand-mark span:nth-child(3) { background: #fbbc04; }
+  .brand-mark span:nth-child(4) { background: #ea4335; }
+  .header-actions { display: flex; align-items: center; gap: 16px; }
+  .header-note { color: var(--text-secondary); font-size: 13px; }
+
+  .menu-btn {
+    width: 40px;
+    height: 40px;
+    gap: 3px;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .menu-btn:hover { background: var(--surface-muted); }
+  .menu-btn span { width: 4px; height: 4px; border-radius: 50%; }
+  .menu-list { top: calc(100% + 4px); min-width: 144px; border-radius: 6px; box-shadow: 0 4px 12px rgba(60, 64, 67, .18); }
+  .menu-list a { padding: 10px 16px; }
+
+  main.workspace {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 34px 24px 64px;
+  }
+  .translator {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: 0 1px 2px rgba(60, 64, 67, .08);
+  }
+  .translator-toolbar {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    min-height: 68px;
+    border-bottom: 1px solid var(--border);
+  }
+  .language-bar { display: flex; align-items: center; min-width: 0; padding-left: 12px; }
+  .language-choice {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 12px;
+    border-bottom: 3px solid var(--blue);
+    color: var(--blue);
+  }
+  .language-choice::after {
+    width: 0;
+    height: 0;
+    margin: 4px 0 0 8px;
+    border-top: 5px solid currentColor;
+    border-right: 4px solid transparent;
+    border-left: 4px solid transparent;
+    content: "";
+    pointer-events: none;
+  }
+  .language-choice select {
+    width: auto;
+    padding: 0;
+    color: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    appearance: none;
+  }
+  .language-choice select:hover { background: transparent; }
+  .language-divider { width: 1px; height: 24px; margin: 0 12px; background: var(--border); }
+  .target-language { color: var(--text-secondary); font-size: 15px; font-weight: 500; white-space: nowrap; }
+  .target-language small { margin-left: 5px; color: #80868b; font-size: 12px; font-weight: 400; }
+  .translator-settings {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 16px;
+  }
+  .check-option {
+    padding: 8px 10px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .check-option:hover { background: var(--surface-muted); }
+  .check-option input { width: 15px; height: 15px; }
+  .model-select { max-width: 126px; padding: 8px 7px; color: var(--text-secondary); font-size: 13px; }
+  .model-select:hover { background: var(--surface-muted); }
+
+  .panels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 390px;
+    border: 0;
+    border-radius: 0;
+    background: var(--border);
+    gap: 1px;
+  }
+  .panel { min-height: 390px; padding: 22px 24px 18px; background: var(--bg); }
+  .source-panel { background: #ffffff; }
+  .output-panel { background: #fbfcff; }
+  .panel-header { min-height: 28px; margin-bottom: 10px; }
+  .panel-label { color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+  .keyboard-hint { color: #80868b; font-size: 12px; }
+  textarea#input-text {
+    min-height: 210px;
+    padding: 3px 0;
+    color: var(--text);
+    font-size: 24px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  textarea#input-text::placeholder { color: #9aa0a6; }
+  .output { min-height: 210px; padding: 3px 0; font-size: 15px; }
+  .output-placeholder { color: #9aa0a6; font-size: 23px; }
+  .panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 46px;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid #eef0f2;
+  }
+  .input-help, .status { min-height: auto; padding: 0; color: #80868b; font-size: 12px; }
+  .primary-action {
+    min-width: 92px;
+    padding: 9px 20px;
+    border-radius: 4px;
+    background: var(--blue);
+    box-shadow: none;
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+  .primary-action:hover { background: var(--blue-hover); }
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .copy-btn:hover { border-color: var(--border); background: var(--surface-muted); }
+  .copy-btn.copied { color: var(--blue); }
+  .copy-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+
+  .lower-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 20px; }
+  .vocab, .follow-up { min-width: 0; margin: 0; padding: 18px 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 1px 2px rgba(60, 64, 67, .06); }
+  .follow-up { grid-column: 1 / -1; }
+  .vocab-header { margin-bottom: 10px; }
+  .vocab-title h2, .follow-up-title { font-size: 15px; font-weight: 500; }
+  .vocab-title h2 { margin: 0; }
+  .vocab-current { padding: 12px 0; border-color: #eef0f2; }
+  .vocab-term { font-size: 18px; }
+  .vocab-list { background: transparent; border-radius: 0; }
+  .vocab-item { padding: 10px 0; border-bottom: 1px solid #eef0f2; }
+  .vocab-item:last-child { border-bottom: 0; }
+  .vocab-chip { border-radius: 16px; }
+  .secondary-btn, .text-btn {
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .secondary-btn:hover, .text-btn:hover { background: var(--blue-soft); }
+  .follow-up-message { border-radius: 6px; }
+  .follow-up-user { background: var(--blue-soft); }
+  textarea.follow-up-input { min-height: 46px; padding: 10px 12px; border-radius: 4px; font-size: 15px; }
+  .follow-up-btn { padding: 9px 18px; border-radius: 4px; letter-spacing: 0; }
+
+  .result h3 { font-size: 23px; line-height: 1.35; }
+  .result .translation { color: #174ea6; font-size: 20px; line-height: 1.55; }
+  .result .sense-list { padding-left: 22px; }
+  .sense-zh { font-size: 17px; }
+  .highlight-sentence { border: 1px solid #edf0f2; background: #f8fafd; }
+
+  @media (max-width: 760px) {
+    .site-header { height: 56px; padding: 0 14px; }
+    .brand { font-size: 19px; }
+    .header-note { display: none; }
+    main.workspace { padding: 16px 12px 36px; }
+    .translator-toolbar { align-items: flex-start; min-height: 112px; flex-direction: column; }
+    .language-bar { width: 100%; min-height: 58px; padding-left: 8px; }
+    .translator-settings { width: 100%; min-height: 48px; padding: 0 12px; border-top: 1px solid #eef0f2; }
+    .panels, .lower-tools { grid-template-columns: minmax(0, 1fr); }
+    .panel { min-height: 280px; padding: 18px 16px 14px; }
+    .output-panel { min-height: 250px; }
+    textarea#input-text, .output-placeholder { font-size: 20px; }
+    textarea#input-text, .output { min-height: 155px; }
+    .follow-up { grid-column: auto; }
+    .vocab-header, .vocab-current, .vocab-item { align-items: stretch; flex-direction: column; }
+    .vocab-actions { flex-wrap: wrap; }
+  }
+</style>
 </head>
 <body>
-  <header>
-    <h1><b>英语翻译</b> 与语法分析</h1>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="DeepTranslate 首页">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      <span>DeepTranslate</span>
+    </a>
+    <div class="header-actions">
+      <span class="header-note">翻译与语法助手</span>
     <div class="menu" id="menu">
-      <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="菜单">
+      <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="更多选项" title="更多选项">
         <span></span><span></span><span></span>
       </button>
       <div class="menu-list" role="menu">
@@ -640,45 +891,63 @@
         <a href="/files/deeptranslate-extension-v1.2.0.zip" role="menuitem" download>插件</a>
       </div>
     </div>
+    </div>
   </header>
-  <main>
-    <div class="panels">
-      <div class="panel">
-<div class="panel-header">
-  <span class="panel-label">原文</span>
-  <div class="source-options">
+  <main class="workspace">
+    <section class="translator" aria-label="翻译工作区">
+      <div class="translator-toolbar">
+        <div class="language-bar">
+          <label class="language-choice">
+            <select id="mode" title="分析模式" aria-label="分析模式">
+              <option value="auto">自动检测</option>
+              <option value="word">单词</option>
+              <option value="sentence">句子</option>
+            </select>
+          </label>
+          <span class="language-divider" aria-hidden="true"></span>
+          <span class="target-language">中文 / English <small>双向翻译</small></span>
+        </div>
+        <div class="translator-settings">
     <label class="check-option" title="仅影响英文句子">
       <input id="grammar-analysis" type="checkbox" checked>
       <span>语法分析</span>
     </label>
-    <select id="model" title="DeepSeek 模型" aria-label="DeepSeek 模型">
+    <select class="model-select" id="model" title="DeepSeek 模型" aria-label="DeepSeek 模型">
       <option value="deepseek-v4-flash">V4 Flash</option>
       <option value="deepseek-v4-pro">V4 Pro</option>
     </select>
-    <select id="mode" title="分析模式" aria-label="分析模式">
-      <option value="auto">自动</option>
-      <option value="word">单词</option>
-      <option value="sentence">句子</option>
-    </select>
-  </div>
-</div>
-<textarea id="input-text" wrap="off" placeholder="输入英文（查词义/语法）或中文（查英文表达）"></textarea>
+        </div>
       </div>
-      <div class="panel">
+      <div class="panels">
+      <section class="panel source-panel">
         <div class="panel-header">
-          <span class="panel-label">译文</span>
-          <span class="status" id="status"></span>
-          <button id="copy-btn" class="icon-btn" title="复制链接" hidden>🔗</button>
+          <span class="panel-label">输入文本</span>
+          <span class="keyboard-hint">Ctrl + Enter</span>
+        </div>
+        <textarea id="input-text" wrap="off" placeholder="输入英文或中文"></textarea>
+        <div class="panel-footer">
+          <span class="input-help">支持单词、短语与完整句子</span>
+          <button id="submit-btn" class="primary-action">翻译</button>
+        </div>
+      </section>
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <span class="panel-label">翻译结果</span>
         </div>
         <div class="output" id="output">
-          <div class="output-placeholder">翻译结果</div>
+          <div class="output-placeholder">翻译结果会显示在这里</div>
         </div>
+        <div class="panel-footer">
+          <span class="status" id="status" aria-live="polite"></span>
+          <button id="copy-btn" class="copy-btn" title="复制分享链接" aria-label="复制分享链接" hidden>
+            <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"></rect><path d="M15 9V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h4"></path></svg>
+          </button>
+        </div>
+      </section>
       </div>
-    </div>
-    <div class="actions">
-      <button id="submit-btn">翻译</button>
-    </div>
-    <section class="vocab" id="vocab" aria-labelledby="vocab-title">
+    </section>
+    <div class="lower-tools">
+      <section class="vocab" id="vocab" aria-labelledby="vocab-title">
       <div class="vocab-header">
         <div class="vocab-title">
           <h2 id="vocab-title">生词本</h2>
@@ -699,8 +968,8 @@
       </div>
       <div class="vocab-suggestions" id="vocab-suggestions" aria-live="polite"></div>
       <div class="vocab-list" id="vocab-list"></div>
-    </section>
-    <section class="follow-up" id="follow-up" aria-labelledby="follow-up-title" hidden>
+      </section>
+      <section class="follow-up" id="follow-up" aria-labelledby="follow-up-title" hidden>
       <h2 class="follow-up-title" id="follow-up-title">追问当前翻译</h2>
       <div class="follow-up-thread" id="follow-up-thread" aria-live="polite"></div>
       <div class="follow-up-compose">
@@ -714,8 +983,8 @@
         ></textarea>
         <button class="follow-up-btn" id="follow-up-btn">提问</button>
       </div>
-    </section>
-    
+      </section>
+    </div>
   </main>
   <script src="/js/marked.min.js"></script>
   <script type="module" src="/app.js"></script>
