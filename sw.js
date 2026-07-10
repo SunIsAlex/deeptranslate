@@ -1,7 +1,7 @@
 // DeepTranslate Service Worker
 // 缓存静态资源，API 请求走网络（因为是实时翻译）
 
-const CACHE_NAME = 'deeptranslate-v12';
+const CACHE_NAME = 'deeptranslate-v13';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   '/js/dom.js',
   '/js/highlight.js',
   '/js/marked.min.js',
+  '/js/practice-history.js',
   '/js/render.js',
   '/js/speech.js',
   '/js/vocabulary.js',

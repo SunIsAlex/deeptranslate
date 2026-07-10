@@ -28,6 +28,8 @@ export const practiceKindEl = document.getElementById("practice-kind");
 export const generatePracticeBtn = document.getElementById("generate-practice");
 export const practiceBodyEl = document.getElementById("practice-body");
 export const practiceStatusEl = document.getElementById("practice-status");
+export const practiceCountEl = document.getElementById("practice-count");
+export const clearPracticeHistoryBtn = document.getElementById("clear-practice-history");
 
 // 转义,防 XSS(因为高亮要用 innerHTML)
 export function escapeHtml(s) {

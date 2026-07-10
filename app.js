@@ -7,6 +7,7 @@ import {
   addCurrentVocabBtn, suggestVocabBtn, vocabSuggestStatusEl,
   vocabSuggestionsEl, vocabListEl, clearVocabBtn,
   practiceEl, practiceKindEl, generatePracticeBtn, practiceBodyEl, practiceStatusEl,
+  practiceCountEl, clearPracticeHistoryBtn,
 } from "./js/dom.js";
 import { askFollowUp, detectDirection, fetchPractice, fetchRelatedWords, translate } from "./js/api.js";
 import { render, renderMarkdown, renderStreaming } from "./js/render.js";
@@ -18,12 +19,20 @@ import {
   removeVocabularyEntry,
   upsertVocabularyEntry,
 } from "./js/vocabulary.js";
+import {
+  addPracticeHistory,
+  clearPracticeHistory,
+  loadPracticeHistory,
+  markPracticeAnswer,
+  sameQuestion,
+} from "./js/practice-history.js";
 
 let currentTranslation = null;
 let currentVocabCandidate = null;
 let followUpHistory = [];
 let followUpController = null;
 let currentPractice = null;
+let practiceHistory = [];
 
 // ── 加载日志与状态 ──────────────────────────────
 function setStage(line) {
@@ -67,20 +76,39 @@ function resetVocabCurrent() {
 
 function resetPractice() {
   currentPractice = null;
+  practiceHistory = [];
   practiceEl.hidden = true;
   practiceBodyEl.innerHTML = "";
   practiceStatusEl.textContent = "";
   generatePracticeBtn.disabled = false;
   generatePracticeBtn.textContent = "生成练习";
+  updatePracticeProgress();
 }
 
 function preparePractice() {
   currentPractice = null;
+  practiceHistory = loadPracticeHistory(currentTranslation);
   practiceEl.hidden = false;
   practiceStatusEl.textContent = "";
   practiceBodyEl.innerHTML = '<p class="practice-empty">尚未生成练习</p>';
   generatePracticeBtn.disabled = false;
   generatePracticeBtn.textContent = "生成练习";
+  updatePracticeProgress();
+}
+
+function updatePracticeProgress() {
+  const completed = practiceHistory.filter((item) => item.completedAt).length;
+  practiceCountEl.textContent = `${completed} 已练 / ${practiceHistory.length} 题`;
+  clearPracticeHistoryBtn.disabled = practiceHistory.length === 0;
+}
+
+function nextPracticeDifficulty() {
+  const completed = practiceHistory.filter((item) => item.completedAt).length;
+  return Math.min(4, 1 + Math.floor(completed / 2));
+}
+
+function difficultyLabel(value) {
+  return ["", "基础识别", "应用练习", "辨析进阶", "表达挑战"][value] || "基础识别";
 }
 
 function renderPractice(practice) {
@@ -89,7 +117,7 @@ function renderPractice(practice) {
 
   const prompt = document.createElement("p");
   prompt.className = "practice-prompt";
-  prompt.textContent = practice.prompt;
+  prompt.textContent = `${difficultyLabel(practice.difficulty)} · ${practice.prompt}`;
   const question = document.createElement("p");
   question.className = "practice-question";
   question.textContent = practice.question;
@@ -147,6 +175,8 @@ function checkPracticeAnswer() {
 
   const accepted = currentPractice.acceptedAnswers || [currentPractice.answer];
   const correct = accepted.some((item) => normalizePracticeAnswer(item) === normalizePracticeAnswer(answer));
+  practiceHistory = markPracticeAnswer(currentTranslation, currentPractice.question, correct);
+  updatePracticeProgress();
   const oldFeedback = practiceBodyEl.querySelector(".practice-feedback");
   oldFeedback?.remove();
 
@@ -494,11 +524,9 @@ generatePracticeBtn.addEventListener("click", async () => {
   practiceStatusEl.textContent = "";
 
   try {
-    const practice = await fetchPractice({
-      context: currentTranslation,
-      kind: practiceKindEl.value,
-      model: modelEl.value,
-    });
+    const practice = await requestFreshPractice();
+    practiceHistory = addPracticeHistory(currentTranslation, practice);
+    updatePracticeProgress();
     renderPractice(practice);
   } catch (error) {
     practiceStatusEl.textContent = error.message || "练习生成失败";
@@ -507,6 +535,36 @@ generatePracticeBtn.addEventListener("click", async () => {
     generatePracticeBtn.textContent = "换一题";
   }
 });
+
+clearPracticeHistoryBtn.addEventListener("click", () => {
+  if (!currentTranslation || !practiceHistory.length) return;
+  practiceHistory = clearPracticeHistory(currentTranslation);
+  currentPractice = null;
+  practiceBodyEl.innerHTML = '<p class="practice-empty">尚未生成练习</p>';
+  practiceStatusEl.textContent = "记录已清空";
+  updatePracticeProgress();
+});
+
+async function requestFreshPractice() {
+  const difficulty = nextPracticeDifficulty();
+  let history = practiceHistory;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const practice = await fetchPractice({
+      context: currentTranslation,
+      kind: practiceKindEl.value,
+      model: modelEl.value,
+      history,
+      difficulty,
+    });
+    if (!history.some((item) => sameQuestion(item.question, practice.question))) {
+      return practice;
+    }
+    history = [{ question: practice.question, answer: practice.answer, kind: practice.kind, difficulty }, ...history];
+  }
+
+  throw new Error("未能生成新题，请重试");
+}
 
 addCurrentVocabBtn.addEventListener("click", () => {
   if (!currentVocabCandidate) return;

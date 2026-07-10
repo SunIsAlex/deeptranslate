@@ -180,11 +180,11 @@ export async function fetchRelatedWords({ input, context, model }) {
   return Array.isArray(data?.items) ? data.items : [];
 }
 
-export async function fetchPractice({ context, kind, model }) {
+export async function fetchPractice({ context, kind, model, history = [], difficulty = 1 }) {
   const res = await fetch("/api/practice", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ context, kind, model }),
+    body: JSON.stringify({ context, kind, model, history, difficulty }),
   });
 
   let data = null;

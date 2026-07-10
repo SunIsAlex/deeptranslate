@@ -854,7 +854,9 @@
     align-items: center;
   }
   .practice-header { justify-content: space-between; gap: 12px; }
+  .practice-title { display: flex; align-items: baseline; gap: 8px; }
   .practice-header h2 { margin: 0; font-size: 15px; font-weight: 500; }
+  .practice-count { color: var(--text-secondary); font-size: 13px; }
   .practice-toolbar { gap: 6px; }
   .practice-kind { padding: 6px 8px; border-radius: 4px; color: var(--text-secondary); font-size: 13px; }
   .practice-kind:hover { background: var(--surface-muted); }
@@ -1009,7 +1011,10 @@
       </section>
       <section class="practice" id="practice" aria-labelledby="practice-title" hidden>
         <div class="practice-header">
-          <h2 id="practice-title">练习模式</h2>
+          <div class="practice-title">
+            <h2 id="practice-title">练习模式</h2>
+            <span class="practice-count" id="practice-count">0 已练 / 0 题</span>
+          </div>
           <div class="practice-toolbar">
             <select class="practice-kind" id="practice-kind" aria-label="练习题型">
               <option value="auto">智能出题</option>
@@ -1018,6 +1023,7 @@
               <option value="choice">选择题</option>
             </select>
             <button class="text-btn" id="generate-practice" type="button">生成练习</button>
+            <button class="text-btn" id="clear-practice-history" type="button" title="清空当前查询的练习记录">清空</button>
           </div>
         </div>
         <div class="practice-body" id="practice-body" aria-live="polite"></div>

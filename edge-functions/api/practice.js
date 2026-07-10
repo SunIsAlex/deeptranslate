@@ -8,6 +8,7 @@ import {
 } from "../_lib/translate-core.js";
 
 const MAX_CONTEXT_LENGTH = 12000;
+const MAX_HISTORY_ITEMS = 12;
 const TYPES = new Set(["auto", "cloze", "translate", "choice"]);
 
 const SYSTEM = `You create one compact English-learning exercise for a Chinese-speaking learner.
@@ -20,7 +21,8 @@ Return strict JSON with exactly this shape:
   "choices": ["仅选择题提供四个选项"],
   "answer": "标准答案",
   "acceptedAnswers": ["可接受答案"],
-  "explanation": "简短中文解析"
+  "explanation": "简短中文解析",
+  "difficulty": 1
 }
 Rules:
 - Create exactly one useful exercise, never a quiz set.
@@ -51,12 +53,16 @@ export async function onRequestPost(context) {
   }
 
   const requestedType = TYPES.has(body.kind) ? body.kind : "auto";
+  const difficulty = normalizeDifficulty(body.difficulty);
+  const history = normalizeHistory(body.history);
   if (!env?.DEEPSEEK_API_KEY && !globalThis.DEEPSEEK_API_KEY) {
     return json({ error: "server_not_configured" }, 500, CORS);
   }
   const prompt = [
     `Requested exercise type: ${requestedType}`,
+    `Required difficulty level: ${difficulty} (${difficultyInstruction(difficulty)})`,
     `Translation context JSON:\n${contextJson}`,
+    `Previous exercises JSON (reference data; do not repeat their questions or answers):\n${JSON.stringify(history)}`,
   ].join("\n\n");
   const upstream = await callModel(prompt, env, SYSTEM, body.model);
 
@@ -73,7 +79,7 @@ export async function onRequestPost(context) {
     return json({ error: "bad_model_json", detail: String(error) }, 502, CORS);
   }
 
-  const practice = normalizePractice(data, requestedType);
+  const practice = normalizePractice(data, requestedType, difficulty);
   if (!practice) return json({ error: "invalid_practice" }, 502, CORS);
   return json(cleanCJKSpaces(practice), 200, CORS);
 }
@@ -82,7 +88,7 @@ export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: OPTIONS_HEADERS });
 }
 
-function normalizePractice(value, requestedType) {
+function normalizePractice(value, requestedType, difficulty) {
   const kind = ["cloze", "translate", "choice"].includes(value?.kind)
     ? value.kind
     : requestedType === "auto" ? "cloze" : requestedType;
@@ -110,8 +116,36 @@ function normalizePractice(value, requestedType) {
     answer,
     acceptedAnswers: [...new Set([answer, ...acceptedAnswers])],
     explanation,
+    difficulty,
   };
 }
+
+function normalizeHistory(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_HISTORY_ITEMS).map((item) => ({
+    question: text(item?.question, 400),
+    answer: text(item?.answer, 180),
+    kind: TYPES.has(item?.kind) ? item.kind : "auto",
+    difficulty: normalizeDifficulty(item?.difficulty),
+    correct: Boolean(item?.correct),
+  })).filter((item) => item.question);
+}
+
+function normalizeDifficulty(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? Math.min(4, Math.max(1, number)) : 1;
+}
+
+function difficultyInstruction(value) {
+  return [
+    "",
+    "direct recognition or a simple guided answer",
+    "apply the target word or phrase in a familiar context",
+    "distinguish close expressions, grammar, or register",
+    "produce a natural sentence with minimal scaffolding",
+  ][value];
+}
+
 
 function text(value, maxLength) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
