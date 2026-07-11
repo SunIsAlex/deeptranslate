@@ -102,7 +102,7 @@ edgeone pages dev         # 本地起调试服务
 `model` 仅接受 `deepseek-v4-flash` 或 `deepseek-v4-pro`，缺省或非法值回退到服务端默认模型。
 
 返回 `type` 字段标明实际类型（word / phrase / sentence），前端据此渲染。单词和词组还返回结构化
-`senses: [{ "zh": "中文义项", "pos": "该义项词性", "phonetic": "/该义项读音/", "definition": "English definition." }]`；原有 `translation`
+`senses: [{ "zh": "中文义项", "pos": "该义项词性", "phonetics": { "uk": ["/英式IPA/"], "us": ["/美式IPA/"] }, "definition": "English definition." }]`；原有 `translation`
 字段继续保留，以兼容已有调用方。
 
 ### POST /api/translate-zh（中译英）

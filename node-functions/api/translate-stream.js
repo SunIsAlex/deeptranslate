@@ -493,26 +493,53 @@ function promptFor(route, text, grammarAnalysis) {
 }
 
 function wordPrompt(word) {
-  return `分析英文单词："${word}"。只输出 json：
+  return `分析英文单词："${word}"。只输出合法 JSON，不要输出 Markdown、注释或其他文字：
 {
-  "translation": "中文释义,多义用 / 分隔,最多 3 个义项",
+  "translation": "中文释义，多义用 / 分隔，最多3个义项",
   "senses": [
-    { "zh": "该义项的简洁中文释义", "pos": "该义项的词性,如 n./v./adj./abbr.", "phonetic": "该义项读音的音标,带 / /", "definition": "A concise English definition of this sense." }
+    {
+      "zh": "该义项的简洁中文释义",
+      "pos": "该义项的词性，如 n./v./adj./abbr.",
+      "phonetics": { "uk": ["/标准英式IPA/"], "us": ["/标准美式IPA/"] },
+      "definition": "A concise English definition of this sense."
+    }
   ],
   "analysis": {
-    "fullForm": "仅当输入是首字母缩略词时给出完整展开,其他词返回空字符串",
-    "inflections": [ { "form": "变形", "label": "类型" } ],
-    "morphology": [ { "part": "构词成分", "kind": "prefix|root|suffix|combining_form|abbr", "meaning": "含义,不超过6字" } ],
+    "fullForm": "仅当输入是首字母缩略词时给出完整展开；其他情况返回空字符串",
+    "inflections": [ { "form": "变形", "label": "类型，如过去式/过去分词/复数/比较级" } ],
+    "morphology": [ { "part": "构词成分", "kind": "prefix|root|suffix|combining_form|abbr", "meaning": "含义，不超过6个汉字" } ],
     "examples": ["英文例句1 — 中文翻译", "英文例句2 — 中文翻译"]
   }
 }
-要求:
-- senses 按常用度列出最多 3 个义项；translation 等于所有 zh 用 " / " 连接；每项 pos 和 phonetic 必须分别是该义项对应的词性和 IPA 音标
-- definition 是对应义项的简洁自然英文解释,不能只是同义词,每项不超过25个英文单词
-- inflections 只列不规则或值得注意的变化;规则变化返回 []
-- morphology 按词中顺序排列;单纯词返回 []
-- 首字母缩略词的 fullForm 给完整展开,morphology 每个字母一条且 kind 用 abbr
-- 所有中文简洁,字符间不加空格`;
+要求：
+- senses 按常用度列出最多3个义项。
+- 每个 sense 的 zh 必须与 translation 中对应义项完全一致；translation 等于所有 zh 按顺序用 " / " 连接。
+- 每项 pos 必须对应当前义项的实际词性。
+- phonetics 必须使用规范 IPA，并分别提供英式和美式读音：
+  1. uk 只填写标准英式发音，非卷舌音中不得错误加入 /r/，例如英式 research 可写 /rɪˈsɜːtʃ/，不能写 /rɪˈsɜːrtʃ/。
+  2. us 只填写标准美式发音，正确表示卷舌元音，例如 research 可写 /rɪˈsɝːtʃ/。
+  3. 必须标出主重音；有次重音时也应标出。
+  4. 每个音标必须带一对斜杠，如 "/rɪˈsɜːtʃ/"。
+  5. 每个地区最多列出2个公认的常见读音，按常用度排列；没有可靠地区读音时返回 []，不得猜测。
+  6. 同一个词的不同义项若读音相同，应填写相同音标，不得为了区分义项而虚构不同读音。
+  7. 只有读音确实随词性或义项变化时，才为对应 sense 提供不同音标，例如 record 的名词和动词重音不同。
+  8. 不得混用英式和美式音标体系，例如不要在英式 /ɜː/ 后加入卷舌 /r/。
+- definition 必须使用简洁、自然的英文解释当前义项，不能只给一个英文同义词，也不能直接重复中文释义；每项不超过25个英文单词。
+- inflections 只列不规则或值得注意的曲折变化，例如 say→said、child→children、good→better/best。
+- 规则变化，如直接加 -s、-ed、-ing，或没有曲折变化的词，inflections 返回 []。
+- morphology 按构词成分在单词中的顺序排列。
+- 接后缀产生拼写变化时，part 使用单词中实际出现的形式，例如 unbelievable 写为 un-/believ/-able。
+- combining_form 用于希腊语或拉丁语来源的实义构词成分，例如 arthro-、-pod、bio-。
+- 仅当输入是由字母名称逐个代表单词的首字母缩略词或首字母词，如 NATO、FBI、UNESCO 时：
+  1. fullForm 给出完整英文展开式；
+  2. morphology 中每个字母单独一项；
+  3. kind 使用 "abbr"；
+  4. meaning 填该字母代表的完整英文单词，例如 N 对应 "North"。
+- 截断类缩写，如 Dr.、etc.、approx.，以及普通单词，fullForm 返回空字符串。
+- 单纯词、无法可靠拆分的词，morphology 返回 []，不得强行拆词。
+- examples 应优先覆盖最常用的两个义项；如果只有一个义项，则两个例句都使用该义项。
+- 所有中文应简洁，中文字符之间不添加多余空格。
+- 输出必须是可被 JSON.parse 直接解析的合法 JSON；不得使用尾随逗号，不得输出 undefined、NaN 或额外字段。`;
 }
 
 function sentencePrompt(sentence, grammarAnalysis) {
@@ -543,7 +570,7 @@ function autoPrompt(text, grammarAnalysis) {
   return `判断并分析:"${text}"。它可能是 word 单词、phrase 词组或 sentence 句子。只输出 json。
 
 word:
-{ "type":"word", "translation":"释义,/分隔最多3个", "senses":[{"zh":"中文义项","pos":"该义项词性","phonetic":"该义项读音的音标带//","definition":"Concise English definition."}], "analysis":{ "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
+{ "type":"word", "translation":"释义,/分隔最多3个", "senses":[{"zh":"中文义项","pos":"该义项词性","phonetics":{"uk":["/英式IPA/"],"us":["/美式IPA/"]},"definition":"Concise English definition."}], "analysis":{ "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
 
 phrase:
 { "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","pos":"该义项词性,如 短语动词/名词短语","definition":"Concise English definition."}], "analysis":{ "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
@@ -553,7 +580,7 @@ ${sentenceSchema}
 
 要求:
 - type 必须准确,pay off 类短语动词是 phrase
-- word 和 phrase 的 senses 按常用度最多3项,definition 是对应义项的简洁英文解释且不超过25词；每项 pos 必须是对应义项的词性，word 的每项 phonetic 必须是对应读音的 IPA 音标
+- word 和 phrase 的 senses 按常用度最多3项,definition 是对应义项的简洁英文解释且不超过25词；每项 pos 必须是对应义项的词性，word 的每项 phonetics 必须分别提供规范的 uk/us IPA 数组
 - sentence 不返回 senses,且${grammarAnalysis ? "必须返回 analysis 语法分析" : "只返回 type 和 translation,不要返回 analysis"}
 - word 的规则词形变化返回 []
 - 所有中文字符间不加空格`;

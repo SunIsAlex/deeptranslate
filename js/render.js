@@ -182,13 +182,15 @@ function renderSenses(senses, fallback, legacy = {}) {
   validSenses.forEach((sense, index) => {
     const item = document.createElement("li");
     item.className = "sense-item";
-    const phonetic = sense.phonetic || (index === 0 ? legacy.phonetic : "");
+    const phonetics = sense.phonetics;
+    const legacyPhonetic = sense.phonetic || (index === 0 ? legacy.phonetic : "");
     const pos = sense.pos || (index === 0 ? legacy.pos : "");
-    if (sense.zh || phonetic || pos) {
+    if (sense.zh || hasPhonetics(phonetics) || legacyPhonetic || pos) {
       const heading = el("div", "sense-zh", sense.zh || "");
-      if (phonetic) heading.appendChild(el("span", "phonetic", phonetic));
       if (pos) heading.appendChild(el("span", "pos", pos));
       item.appendChild(heading);
+      const pronunciation = renderPhonetics(phonetics, legacyPhonetic);
+      if (pronunciation) item.appendChild(pronunciation);
     }
     if (sense.definition) {
       item.appendChild(el("div", "sense-definition", sense.definition));
@@ -196,6 +198,27 @@ function renderSenses(senses, fallback, legacy = {}) {
     list.appendChild(item);
   });
   return list;
+}
+
+function hasPhonetics(phonetics) {
+  return ["uk", "us"].some((variant) =>
+    Array.isArray(phonetics?.[variant]) && phonetics[variant].some(Boolean)
+  );
+}
+
+function renderPhonetics(phonetics, legacyPhonetic) {
+  const row = el("div", "sense-phonetics");
+  [["uk", "UK"], ["us", "US"]].forEach(([variant, label]) => {
+    const values = Array.isArray(phonetics?.[variant])
+      ? phonetics[variant].filter(Boolean).slice(0, 2)
+      : [];
+    if (!values.length) return;
+    const group = el("span", "sense-phonetic-group");
+    group.append(el("span", "sense-phonetic-label", label), document.createTextNode(values.join(" ")));
+    row.appendChild(group);
+  });
+  if (!row.childNodes.length && legacyPhonetic) row.appendChild(el("span", "phonetic", legacyPhonetic));
+  return row.childNodes.length ? row : null;
 }
 
 function renderZh(data) {
