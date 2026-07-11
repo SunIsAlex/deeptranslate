@@ -7,8 +7,17 @@ export function canSpeak() {
   return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 }
 
+export function englishSpeechText(text) {
+  return String(text || "")
+    .replace(/\[\[|\]\]/g, "")
+    .split(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/, 1)[0]
+    .replace(/\s*[—–-]\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function speakEnglish(text, variant = "us") {
-  const source = String(text || "").replace(/\s+/g, " ").trim();
+  const source = englishSpeechText(text);
   if (!source || !canSpeak()) return false;
 
   const locale = VOICES[variant] || VOICES.us;
