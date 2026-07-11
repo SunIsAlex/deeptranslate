@@ -493,15 +493,15 @@ function promptFor(route, text, grammarAnalysis) {
 }
 
 function wordPrompt(word) {
-  return `分析英文单词："${word}"。只输出合法 JSON，不要输出 Markdown、注释或其他文字：
+  return `分析英文单词："${word}"。只输出可被 JSON.parse 直接解析的合法 JSON，不要输出 Markdown、注释或其他文字：
 {
-  "translation": "中文释义，多义用 / 分隔，最多3个义项",
+  "translation": "主要中文释义；不同含义用 / 分隔，去重后最多3项",
   "senses": [
     {
-      "zh": "该义项的简洁中文释义",
+      "zh": "该词性或义项最准确、简洁的中文释义",
       "pos": "该义项的词性，如 n./v./adj./abbr.",
       "phonetics": { "uk": ["/标准英式IPA/"], "us": ["/标准美式IPA/"] },
-      "definition": "A concise English definition of this sense."
+      "definition": "A concise learner-friendly English definition."
     }
   ],
   "analysis": {
@@ -512,19 +512,27 @@ function wordPrompt(word) {
   }
 }
 要求：
-- senses 按常用度列出最多3个义项。
-- 每个 sense 的 zh 必须与 translation 中对应义项完全一致；translation 等于所有 zh 按顺序用 " / " 连接。
-- 每项 pos 必须对应当前义项的实际词性。
+- senses 表示单词的常用词性和语义用法，按常用度排列，最多3项。
+- 同一个英文单词的不同词性可以具有相同的中文释义。例如 research 的名词和动词都可以写成“研究”。
+- 不得为了让不同 sense 的 zh 看起来不同，而使用较不准确的近义词、扩大词义或虚构义项。
+- pos 用于区分英文单词的词性；zh 不需要为了区分词性而刻意不同。
+- translation 按 senses 顺序提取 zh，对完全相同的中文释义去重，保留首次出现顺序，再用 " / " 连接。
+- translation 不要求等于所有 zh 的机械连接。例如两个 sense 的 zh 都是“研究”时，translation 应为“研究”，不能写成“研究 / 研究”，也不能为了避免重复把其中一项改成“调查”。
+- 一个 sense 只表示一个核心含义。若某词性下有两个接近但常见的中文对应，可在 zh 中用“；”连接，但不得超过两个。
 - phonetics 必须使用规范 IPA，并分别提供英式和美式读音：
   1. uk 只填写标准英式发音，非卷舌音中不得错误加入 /r/，例如英式 research 可写 /rɪˈsɜːtʃ/，不能写 /rɪˈsɜːrtʃ/。
   2. us 只填写标准美式发音，正确表示卷舌元音，例如 research 可写 /rɪˈsɝːtʃ/。
   3. 必须标出主重音；有次重音时也应标出。
   4. 每个音标必须带一对斜杠，如 "/rɪˈsɜːtʃ/"。
-  5. 每个地区最多列出2个公认的常见读音，按常用度排列；没有可靠地区读音时返回 []，不得猜测。
-  6. 同一个词的不同义项若读音相同，应填写相同音标，不得为了区分义项而虚构不同读音。
-  7. 只有读音确实随词性或义项变化时，才为对应 sense 提供不同音标，例如 record 的名词和动词重音不同。
-  8. 不得混用英式和美式音标体系，例如不要在英式 /ɜː/ 后加入卷舌 /r/。
-- definition 必须使用简洁、自然的英文解释当前义项，不能只给一个英文同义词，也不能直接重复中文释义；每项不超过25个英文单词。
+  5. 每个地区最多列出2个可靠、常见的读音变体，按常用度排列。
+  6. 仅列词典中公认的读音变体，不得自行根据拼写或“名词前重音、动词后重音”等概括规则推断音标。
+  7. 某个词性只有一个可靠读音时只列一个，不得为了填满数组制造变体。
+  8. 不同词性读音相同时可以填写相同音标。
+  9. 不同词性确有重音或音素差异时，分别填写对应读音。
+  10. 不得混用英式和美式音标体系。
+- definition 必须准确解释当前 sense，使用自然、易懂的 CEFR B1-B2 学习型词典英语，每项不超过20个英文单词。
+- definition 不得只提供一个同义词，不得使用该单词自身或直接词形变化进行循环定义。
+- 动词定义优先使用直接的动词表达，不要只是把对应名词定义改写成 "to conduct..."；名词和动词含义接近时，定义可以相似，但必须符合各自语法。
 - inflections 只列不规则或值得注意的曲折变化，例如 say→said、child→children、good→better/best。
 - 规则变化，如直接加 -s、-ed、-ing，或没有曲折变化的词，inflections 返回 []。
 - morphology 按构词成分在单词中的顺序排列。
@@ -537,9 +545,9 @@ function wordPrompt(word) {
   4. meaning 填该字母代表的完整英文单词，例如 N 对应 "North"。
 - 截断类缩写，如 Dr.、etc.、approx.，以及普通单词，fullForm 返回空字符串。
 - 单纯词、无法可靠拆分的词，morphology 返回 []，不得强行拆词。
-- examples 应优先覆盖最常用的两个义项；如果只有一个义项，则两个例句都使用该义项。
-- 所有中文应简洁，中文字符之间不添加多余空格。
-- 输出必须是可被 JSON.parse 直接解析的合法 JSON；不得使用尾随逗号，不得输出 undefined、NaN 或额外字段。`;
+- examples 优先覆盖最常用的两个 sense，且必须自然体现对应词义和词性。
+- 所有中文简洁，中文字符之间不添加多余空格。
+- 不得输出额外字段、尾随逗号、undefined 或 NaN。`;
 }
 
 function sentencePrompt(sentence, grammarAnalysis) {

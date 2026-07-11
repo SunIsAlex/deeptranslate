@@ -20,7 +20,7 @@ export async function onRequestPost({ request, env }) {
 
   const model = resolveModel(body.model, env);
   const grammarAnalysis = body.grammarAnalysis !== false;
-  const variant = `${model}:${grammarAnalysis ? "grammar" : "translation"}:regional-phonetics-v3`;
+  const variant = `${model}:${grammarAnalysis ? "grammar" : "translation"}:sense-dedup-v4`;
   const key = buildCacheKey("en2zh", route, text, variant);
   if (body.action === "get") {
     const result = await readCache(key);
