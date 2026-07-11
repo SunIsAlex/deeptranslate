@@ -497,10 +497,9 @@ function wordPrompt(word) {
 {
   "translation": "中文释义,多义用 / 分隔,最多 3 个义项",
   "senses": [
-    { "zh": "该义项的简洁中文释义", "phonetic": "该义项读音的音标,带 / /", "definition": "A concise English definition of this sense." }
+    { "zh": "该义项的简洁中文释义", "pos": "该义项的词性,如 n./v./adj./abbr.", "phonetic": "该义项读音的音标,带 / /", "definition": "A concise English definition of this sense." }
   ],
   "analysis": {
-    "pos": "词性,如 n./v./adj./abbr.",
     "fullForm": "仅当输入是首字母缩略词时给出完整展开,其他词返回空字符串",
     "inflections": [ { "form": "变形", "label": "类型" } ],
     "morphology": [ { "part": "构词成分", "kind": "prefix|root|suffix|combining_form|abbr", "meaning": "含义,不超过6字" } ],
@@ -508,7 +507,7 @@ function wordPrompt(word) {
   }
 }
 要求:
-- senses 按常用度列出最多 3 个义项；translation 等于所有 zh 用 " / " 连接；每项 phonetic 必须是该义项对应读音的 IPA 音标
+- senses 按常用度列出最多 3 个义项；translation 等于所有 zh 用 " / " 连接；每项 pos 和 phonetic 必须分别是该义项对应的词性和 IPA 音标
 - definition 是对应义项的简洁自然英文解释,不能只是同义词,每项不超过25个英文单词
 - inflections 只列不规则或值得注意的变化;规则变化返回 []
 - morphology 按词中顺序排列;单纯词返回 []
@@ -544,17 +543,17 @@ function autoPrompt(text, grammarAnalysis) {
   return `判断并分析:"${text}"。它可能是 word 单词、phrase 词组或 sentence 句子。只输出 json。
 
 word:
-{ "type":"word", "translation":"释义,/分隔最多3个", "senses":[{"zh":"中文义项","phonetic":"该义项读音的音标带//","definition":"Concise English definition."}], "analysis":{ "pos":"词性", "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
+{ "type":"word", "translation":"释义,/分隔最多3个", "senses":[{"zh":"中文义项","pos":"该义项词性","phonetic":"该义项读音的音标带//","definition":"Concise English definition."}], "analysis":{ "inflections":[{"form":"变形","label":"类型"}], "morphology":[{"part":"成分","kind":"prefix|root|suffix|combining_form","meaning":"含义≤6字"}], "examples":["例句 — 翻译"] } }
 
 phrase:
-{ "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","definition":"Concise English definition."}], "analysis":{ "pos":"如 短语动词/固定搭配", "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
+{ "type":"phrase", "translation":"整体含义,/分隔最多3个", "senses":[{"zh":"中文义项","pos":"该义项词性,如 短语动词/名词短语","definition":"Concise English definition."}], "analysis":{ "usage":"用法/可分性,≤30字", "examples":["例句 — 翻译","例句 — 翻译"] } }
 
 sentence:
 ${sentenceSchema}
 
 要求:
 - type 必须准确,pay off 类短语动词是 phrase
-- word 和 phrase 的 senses 按常用度最多3项,definition 是对应义项的简洁英文解释且不超过25词；word 的每项 phonetic 必须是该义项对应读音的 IPA 音标
+- word 和 phrase 的 senses 按常用度最多3项,definition 是对应义项的简洁英文解释且不超过25词；每项 pos 必须是对应义项的词性，word 的每项 phonetic 必须是对应读音的 IPA 音标
 - sentence 不返回 senses,且${grammarAnalysis ? "必须返回 analysis 语法分析" : "只返回 type 和 translation,不要返回 analysis"}
 - word 的规则词形变化返回 []
 - 所有中文字符间不加空格`;

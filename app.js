@@ -249,11 +249,14 @@ function getVocabCandidate(data) {
   const senses = Array.isArray(data.senses)
     ? data.senses.map((sense) => sense?.zh).filter(Boolean)
     : [];
+  const partsOfSpeech = Array.isArray(data.senses)
+    ? [...new Set(data.senses.map((sense) => sense?.pos).filter(Boolean))]
+    : [];
   const translation = senses.length ? senses.slice(0, 3).join("；") : data.translation || "";
   return {
     term,
     translation,
-    note: data.analysis?.pos || "",
+    note: partsOfSpeech.join("/") || data.analysis?.pos || "",
     source: "search",
   };
 }

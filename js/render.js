@@ -105,15 +105,12 @@ function renderWord(data) {
   const h = document.createElement("h3");
   h.textContent = input;
   
-  if (analysis?.pos) {
-    const pos = document.createElement("span");
-    pos.className = "pos";
-    pos.textContent = analysis.pos;
-    h.appendChild(pos);
-  }
   frag.appendChild(createResultHeading(input, h));
 
-  frag.appendChild(renderSenses(senses, translation, analysis?.phonetic));
+  frag.appendChild(renderSenses(senses, translation, {
+    phonetic: analysis?.phonetic,
+    pos: analysis?.pos,
+  }));
   if (analysis?.fullForm) {
   frag.appendChild(el("div", "full-form", analysis.fullForm));
 }
@@ -153,15 +150,9 @@ function renderPhrase(data) {
 
   const h = document.createElement("h3");
   h.textContent = input;
-  if (analysis?.pos) {
-    const pos = document.createElement("span");
-    pos.className = "pos";
-    pos.textContent = analysis.pos;
-    h.appendChild(pos);
-  }
   frag.appendChild(createResultHeading(input, h));
 
-  frag.appendChild(renderSenses(senses, translation));
+  frag.appendChild(renderSenses(senses, translation, { pos: analysis?.pos }));
 
   if (analysis?.usage) {
     frag.appendChild(section("用法", [el("li", "", analysis.usage)]));
@@ -179,7 +170,7 @@ function renderPhrase(data) {
 }
 
 // 新接口按义项同时返回中文释义和英文解释；fallback 兼容旧缓存或旧接口数据。
-function renderSenses(senses, fallback, legacyPhonetic = "") {
+function renderSenses(senses, fallback, legacy = {}) {
   const validSenses = Array.isArray(senses)
     ? senses.filter((sense) => sense?.zh || sense?.definition)
     : [];
@@ -191,10 +182,12 @@ function renderSenses(senses, fallback, legacyPhonetic = "") {
   validSenses.forEach((sense, index) => {
     const item = document.createElement("li");
     item.className = "sense-item";
-    if (sense.zh || sense.phonetic || (index === 0 && legacyPhonetic)) {
+    const phonetic = sense.phonetic || (index === 0 ? legacy.phonetic : "");
+    const pos = sense.pos || (index === 0 ? legacy.pos : "");
+    if (sense.zh || phonetic || pos) {
       const heading = el("div", "sense-zh", sense.zh || "");
-      const phonetic = sense.phonetic || (index === 0 ? legacyPhonetic : "");
       if (phonetic) heading.appendChild(el("span", "phonetic", phonetic));
+      if (pos) heading.appendChild(el("span", "pos", pos));
       item.appendChild(heading);
     }
     if (sense.definition) {
