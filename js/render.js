@@ -105,12 +105,6 @@ function renderWord(data) {
   const h = document.createElement("h3");
   h.textContent = input;
   
-  if (analysis?.phonetic) {
-    const ph = document.createElement("span");
-    ph.className = "phonetic";
-    ph.textContent = analysis.phonetic;
-    h.appendChild(ph);
-  }
   if (analysis?.pos) {
     const pos = document.createElement("span");
     pos.className = "pos";
@@ -119,7 +113,7 @@ function renderWord(data) {
   }
   frag.appendChild(createResultHeading(input, h));
 
-  frag.appendChild(renderSenses(senses, translation));
+  frag.appendChild(renderSenses(senses, translation, analysis?.phonetic));
   if (analysis?.fullForm) {
   frag.appendChild(el("div", "full-form", analysis.fullForm));
 }
@@ -185,7 +179,7 @@ function renderPhrase(data) {
 }
 
 // 新接口按义项同时返回中文释义和英文解释；fallback 兼容旧缓存或旧接口数据。
-function renderSenses(senses, fallback) {
+function renderSenses(senses, fallback, legacyPhonetic = "") {
   const validSenses = Array.isArray(senses)
     ? senses.filter((sense) => sense?.zh || sense?.definition)
     : [];
@@ -194,10 +188,15 @@ function renderSenses(senses, fallback) {
 
   const list = document.createElement("ol");
   list.className = "sense-list";
-  validSenses.forEach((sense) => {
+  validSenses.forEach((sense, index) => {
     const item = document.createElement("li");
     item.className = "sense-item";
-    if (sense.zh) item.appendChild(el("div", "sense-zh", sense.zh));
+    if (sense.zh || sense.phonetic || (index === 0 && legacyPhonetic)) {
+      const heading = el("div", "sense-zh", sense.zh || "");
+      const phonetic = sense.phonetic || (index === 0 ? legacyPhonetic : "");
+      if (phonetic) heading.appendChild(el("span", "phonetic", phonetic));
+      item.appendChild(heading);
+    }
     if (sense.definition) {
       item.appendChild(el("div", "sense-definition", sense.definition));
     }
