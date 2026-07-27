@@ -3,7 +3,8 @@
 
 import {
   CORS, OPTIONS_HEADERS, json, callModel,
-  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
+  cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
+  modelMessageContent, parseModelObject, extractCompletedStringProperty,
 } from "../_lib/translate-core.js";
 
 const SYSTEM = "你是英语学习助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 example 例句中，把目标英文表达用 [[ ]] 括起来，只括英文部分。";
@@ -51,23 +52,81 @@ async function handle({ request, env }) {
     return json({ error: "upstream_error", status: upstream.status, detail: errText }, 502, CORS);
   }
 
-  const data = await upstream.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-
-  let parsed;
+  let data;
   try {
-    parsed = JSON.parse(stripFences(content));
+    data = await upstream.json();
   } catch {
-    return json({ error: "model_output_not_json", raw: content }, 502, CORS);
+    return json({ error: "upstream_response_not_json" }, 502, CORS);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return json({ error: "model_output_not_object", raw: content }, 502, CORS);
+
+  let content = modelMessageContent(data);
+  let parsed = parseModelObject(content);
+  if (!hasTranslations(parsed)) parsed = null;
+  let recovered = false;
+  let degraded = false;
+
+  if (!parsed && route === "sentence") {
+    console.warn("invalid zh2en model JSON; retrying compact sentence output", {
+      finishReason: data?.choices?.[0]?.finish_reason,
+      contentLength: content.length,
+      inputLength: text.length,
+    });
+    const retry = await callModel(compactZhSentencePrompt(text), env, SYSTEM, model);
+    if (retry.ok) {
+      try {
+        const retryData = await retry.json();
+        const retryContent = modelMessageContent(retryData);
+        parsed = parseModelObject(retryContent);
+        if (!hasTranslations(parsed)) parsed = null;
+        if (parsed) {
+          content = retryContent;
+          recovered = true;
+        } else {
+          const en = extractCompletedStringProperty(retryContent, "en")
+            || extractCompletedStringProperty(content, "en");
+          if (en) {
+            parsed = { type: "sentence", translations: [{ en }] };
+            content = retryContent;
+            recovered = true;
+            degraded = true;
+          }
+        }
+      } catch {
+        // 继续使用首次响应安全降级。
+      }
+    }
+
+    if (!parsed) {
+      const en = extractCompletedStringProperty(content, "en");
+      if (en) {
+        parsed = { type: "sentence", translations: [{ en }] };
+        recovered = true;
+        degraded = true;
+      }
+    }
+  }
+
+  if (!parsed) {
+    return json({
+      error: "model_output_not_json",
+      finishReason: data?.choices?.[0]?.finish_reason || null,
+      contentLength: content.length,
+    }, 502, CORS);
   }
 
   parsed = cleanCJKSpaces(parsed);
-  const result = { direction: "zh2en", input: text, ...parsed, model };
+  const result = {
+    direction: "zh2en",
+    input: text,
+    ...parsed,
+    model,
+    ...(recovered ? { _recovered: true } : {}),
+    ...(degraded ? { _degraded: true } : {}),
+  };
 
-  writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
+  if (!degraded) {
+    writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
+  }
 
   return json(result, 200, CORS);
 }
@@ -86,4 +145,15 @@ function zhPrompt(text) {
 - example 中目标英文表达用 [[ ]] 括起来
 - 句子输入时给 1 个最地道的整句翻译即可
 - 所有中文字符间不加空格`;
+}
+
+function compactZhSentencePrompt(text) {
+  return `把下面中文完整翻译成一个自然、准确的英文句子。只输出可被 JSON.parse 解析的 JSON，不要 Markdown、解释或备选译法。
+中文：${JSON.stringify(text)}
+格式：{"type":"sentence","translations":[{"en":"完整英文译文"}]}`;
+}
+
+function hasTranslations(value) {
+  return Array.isArray(value?.translations)
+    && value.translations.some((item) => typeof item?.en === "string" && item.en.trim());
 }

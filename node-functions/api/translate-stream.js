@@ -2,6 +2,7 @@
 
 const SYSTEM = "你是英语语言学助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 examples 例句中，把目标单词/词组实际出现的形态用 [[ ]] 括起来，只括英文部分，中文翻译里不要加。";
 const SUPPORTED_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
+const MODEL_MAX_OUTPUT_TOKENS = 8192;
 
 const JSON_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -67,6 +68,7 @@ export async function onRequestPost(context) {
           { role: "user", content: promptFor(route, text, grammarAnalysis) },
         ],
         temperature: 0.2,
+        max_tokens: MODEL_MAX_OUTPUT_TOKENS,
         response_format: { type: "json_object" },
         thinking: { type: "disabled" },
         stream: true,
@@ -191,12 +193,23 @@ async function pumpModelStream({
       if (done) break;
     }
 
-    let parsed = JSON.parse(stripFences(content));
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("model_output_not_object");
+    let parsed = parseModelObject(content);
+    if (typeof parsed?.translation !== "string" || !parsed.translation.trim()) {
+      parsed = null;
+    }
+    let degraded = false;
+    if (!parsed) {
+      // 长句最常见的失败是 translation 已完整、后面的 analysis 被输出上限截断。
+      // 保留完整译文并省略残缺分析，比结束 SSE 后让前端再次请求并收到 502 更稳健。
+      const translation = extractStringProperty(content, "translation");
+      if (!translation) throw new Error("model_output_not_json");
+      parsed = { translation };
+      degraded = true;
     }
     parsed = cleanCJKSpaces(parsed);
-    const finalType = route === "auto" ? (parsed.type || "sentence") : route;
+    const finalType = route === "auto"
+      ? (parsed.type || extractStringProperty(content, "type") || "sentence")
+      : route;
     const result = {
       direction: "en2zh",
       input: text,
@@ -206,6 +219,7 @@ async function pumpModelStream({
       grammarAnalysis,
       _cached: false,
       _streamed: true,
+      ...(degraded ? { _degraded: true } : {}),
     };
 
     // 兜底：若模型字段顺序异常，最终解析后仍补发未发送的内容。
@@ -224,15 +238,17 @@ async function pumpModelStream({
 
     await send("result", result);
     // 保持连接打开直到缓存落盘，避免响应结束后运行时提前回收。
-    await writeEdgeCache(
-      requestUrl,
-      text,
-      route,
-      model,
-      grammarAnalysis,
-      result,
-      apiKey,
-    );
+    if (!degraded) {
+      await writeEdgeCache(
+        requestUrl,
+        text,
+        route,
+        model,
+        grammarAnalysis,
+        result,
+        apiKey,
+      );
+    }
     await send("done", {});
   } catch (error) {
     if (error?.name !== "AbortError") {
@@ -355,7 +371,61 @@ function json(value, status) {
 }
 
 function stripFences(value) {
-  return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  return String(value || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function parseModelObject(content) {
+  const source = stripFences(content);
+  try {
+    const value = JSON.parse(source);
+    if (isPlainObject(value)) return value;
+  } catch {
+    // 继续提取外围说明文字中的完整 JSON 对象。
+  }
+
+  for (let start = source.indexOf("{"); start >= 0;) {
+    const end = findBalancedObjectEnd(source, start);
+    if (end < 0) return null;
+    try {
+      const value = JSON.parse(source.slice(start, end + 1));
+      if (isPlainObject(value)) return value;
+    } catch {
+      // 继续扫描。
+    }
+    start = source.indexOf("{", end + 1);
+  }
+  return null;
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function findBalancedObjectEnd(source, start) {
+  const stack = ["{"];
+  let inString = false;
+  let escaped = false;
+  for (let cursor = start + 1; cursor < source.length; cursor += 1) {
+    const char = source[cursor];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{" || char === "[") stack.push(char);
+    else if (char === "}" || char === "]") {
+      const expected = char === "}" ? "{" : "[";
+      if (stack.pop() !== expected) return -1;
+      if (!stack.length) return cursor;
+    }
+  }
+  return -1;
 }
 
 function cleanCJKSpaces(value) {
@@ -566,8 +636,9 @@ function sentencePrompt(sentence, grammarAnalysis) {
   }
 }
 要求:
-- role 必须从给定枚举值中选取,components 按原文顺序排列
-- grammar_points 聚焦学习者易忽略的点,没有则返回空数组
+- role 必须从给定枚举值中选取；components 按原文顺序排列，只保留关键成分，最多 10 项；note 每项不超过 20 个汉字
+- structure 不超过 80 个汉字
+- grammar_points 聚焦学习者易忽略的点，最多 4 项，没有则返回空数组
 - 中文字符之间不要插入空格`;
 }
 

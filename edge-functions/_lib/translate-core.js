@@ -19,6 +19,7 @@ export const OPTIONS_HEADERS = {
 export const CACHE_VERSION = "v4";
 export const CACHE_TTL_SEC = 60 * 60 * 24 * 30; // 30 天
 export const SUPPORTED_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
+export const MODEL_MAX_OUTPUT_TOKENS = 8192;
 
 export function json(obj, status, headers) {
   return new Response(JSON.stringify(obj), { status, headers });
@@ -52,6 +53,7 @@ export async function callModel(userPrompt, env, systemContent, model) {
         { role: "user", content: userPrompt },
       ],
       temperature: 0.2,
+      max_tokens: MODEL_MAX_OUTPUT_TOKENS,
       response_format: { type: "json_object" },
       thinking: { type: "disabled" },
     }),
@@ -62,7 +64,118 @@ export async function callModel(userPrompt, env, systemContent, model) {
 }
 
 export function stripFences(s) {
-  return s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  return String(s || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+// 部分兼容 OpenAI 的上游会把 content 返回为文本片段数组。
+export function modelMessageContent(data) {
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      return typeof part?.text === "string" ? part.text : "";
+    })
+    .join("");
+}
+
+// response_format 通常能保证纯 JSON，但个别模型仍可能加说明文字或代码块。
+// 先解析完整内容，再扫描第一个配平的 JSON 对象；绝不猜测或补写 JSON。
+export function parseModelObject(content) {
+  const source = stripFences(content);
+  try {
+    const value = JSON.parse(source);
+    return isPlainObject(value) ? value : null;
+  } catch {
+    // 继续尝试提取外围文字中的完整对象。
+  }
+
+  for (let start = source.indexOf("{"); start >= 0;) {
+    const end = findBalancedObjectEnd(source, start);
+    // 未配平时后续的 "{" 都属于这个残缺对象，不能把内部对象当成顶层结果。
+    if (end < 0) return null;
+    try {
+      const value = JSON.parse(source.slice(start, end + 1));
+      if (isPlainObject(value)) return value;
+    } catch {
+      // 可能是说明文字中的示例，继续扫描下一个对象。
+    }
+    start = source.indexOf("{", end + 1);
+  }
+  return null;
+}
+
+// 截断通常发生在 analysis 后半段；只在 translation 字符串已经完整闭合时降级。
+export function extractCompletedStringProperty(content, key) {
+  const source = stripFences(content);
+  const needle = `"${key}"`;
+  let offset = 0;
+  while (offset < source.length) {
+    const keyStart = source.indexOf(needle, offset);
+    if (keyStart < 0) return null;
+    let cursor = keyStart + needle.length;
+    while (/\s/.test(source[cursor] || "")) cursor += 1;
+    if (source[cursor] !== ":") {
+      offset = keyStart + needle.length;
+      continue;
+    }
+    cursor += 1;
+    while (/\s/.test(source[cursor] || "")) cursor += 1;
+    if (source[cursor] !== '"') return null;
+
+    let escaped = false;
+    for (let end = cursor + 1; end < source.length; end += 1) {
+      const char = source[end];
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        try {
+          const value = JSON.parse(source.slice(cursor, end + 1));
+          return typeof value === "string" ? value : null;
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function findBalancedObjectEnd(source, start) {
+  const stack = ["{"];
+  let inString = false;
+  let escaped = false;
+  for (let cursor = start + 1; cursor < source.length; cursor += 1) {
+    const char = source[cursor];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{" || char === "[") {
+      stack.push(char);
+    } else if (char === "}" || char === "]") {
+      const expected = char === "}" ? "{" : "[";
+      if (stack.pop() !== expected) return -1;
+      if (!stack.length) return cursor;
+    }
+  }
+  return -1;
 }
 
 export function cleanCJKSpaces(obj) {

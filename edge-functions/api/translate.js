@@ -3,7 +3,8 @@
 
 import {
   CORS, OPTIONS_HEADERS, json, callModel,
-  stripFences, cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
+  cleanCJKSpaces, buildCacheKey, readCache, writeCache, resolveModel,
+  modelMessageContent, parseModelObject, extractCompletedStringProperty,
 } from "../_lib/translate-core.js";
 
 const SYSTEM = "你是英语语言学助手。严格只输出 json，不要任何额外文字、markdown 或代码块。在 examples 例句中，把目标单词/词组实际出现的形态用 [[ ]] 括起来（如 He finally [[paid off]] his debts.），只括英文部分，中文翻译里不要加。";
@@ -56,17 +57,67 @@ async function handle({ request, env }) {
     return json({ error: "upstream_error", status: upstream.status, detail: errText }, 502, CORS);
   }
 
-  const data = await upstream.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-
-  let parsed;
+  let data;
   try {
-    parsed = JSON.parse(stripFences(content));
+    data = await upstream.json();
   } catch {
-    return json({ error: "model_output_not_json", raw: content }, 502, CORS);
+    return json({ error: "upstream_response_not_json" }, 502, CORS);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return json({ error: "model_output_not_object", raw: content }, 502, CORS);
+
+  let content = modelMessageContent(data);
+  let parsed = parseModelObject(content);
+  if (!hasTranslation(parsed)) parsed = null;
+  let recovered = false;
+  let degraded = false;
+
+  if (!parsed && route === "sentence") {
+    console.warn("invalid model JSON; retrying compact sentence output", {
+      finishReason: data?.choices?.[0]?.finish_reason,
+      contentLength: content.length,
+      inputLength: text.length,
+    });
+    const retry = await callModel(compactSentencePrompt(text, grammarAnalysis), env, SYSTEM, model);
+    if (retry.ok) {
+      try {
+        const retryData = await retry.json();
+        const retryContent = modelMessageContent(retryData);
+        parsed = parseModelObject(retryContent);
+        if (!hasTranslation(parsed)) parsed = null;
+        if (parsed) {
+          content = retryContent;
+          recovered = true;
+        } else {
+          // translation 通常位于 JSON 最前面。若它完整，只丢弃被截断的分析部分。
+          const translation = extractCompletedStringProperty(retryContent, "translation")
+            || extractCompletedStringProperty(content, "translation");
+          if (translation) {
+            parsed = { translation };
+            content = retryContent;
+            recovered = true;
+            degraded = true;
+          }
+        }
+      } catch {
+        // 继续使用首次响应做最后一次安全降级。
+      }
+    }
+
+    if (!parsed) {
+      const translation = extractCompletedStringProperty(content, "translation");
+      if (translation) {
+        parsed = { translation };
+        recovered = true;
+        degraded = true;
+      }
+    }
+  }
+
+  if (!parsed) {
+    return json({
+      error: "model_output_not_json",
+      finishReason: data?.choices?.[0]?.finish_reason || null,
+      contentLength: content.length,
+    }, 502, CORS);
   }
 
   parsed = cleanCJKSpaces(parsed);
@@ -78,9 +129,14 @@ async function handle({ request, env }) {
     type: finalType,
     model,
     grammarAnalysis,
+    ...(recovered ? { _recovered: true } : {}),
+    ...(degraded ? { _degraded: true } : {}),
   };
 
-  writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
+  // 降级结果没有完整语法分析，不写缓存，下一次请求仍有机会拿到完整结果。
+  if (!degraded) {
+    writeCache(cacheKey, result).catch((e) => console.error("KV write failed:", e));
+  }
 
   return json(result, 200, CORS);
 }
@@ -174,9 +230,23 @@ function sentencePrompt(sentence, grammarAnalysis) {
 }
 要求：
 - role 必须从给定枚举值中选取
-- components 按句子中出现顺序排列
-- grammar_points 聚焦于学习者易忽略的点（从句、非谓语、虚拟语气、倒装等），没有则返回空数组
+- components 按句子中出现顺序排列，只保留理解句子所必需的关键成分，最多 10 项；note 每项不超过 20 个汉字
+- structure 不超过 80 个汉字
+- grammar_points 聚焦于学习者易忽略的点（从句、非谓语、虚拟语气、倒装等），最多 4 项，没有则返回空数组
 - 中文字符之间不要插入空格`;
+}
+
+function compactSentencePrompt(sentence, grammarAnalysis) {
+  if (!grammarAnalysis) return sentencePrompt(sentence, false);
+  return `把下面英文完整翻译为地道中文，并给出精简语法分析。只输出可被 JSON.parse 解析的 JSON，不要 Markdown 或额外文字。
+英文：${JSON.stringify(sentence)}
+格式：
+{"translation":"完整中文译文","analysis":{"structure":"一句话概括","components":[{"role":"主语|谓语|宾语|表语|定语|状语|补语|同位语|插入语","text":"原文关键片段","note":"简短说明"}],"grammar_points":["关键语法点"]}}
+限制：components 最多 8 项，只选理解句子所必需的关键成分；grammar_points 最多 3 项；note 每项不超过 15 个汉字；不要重复原文或解释翻译过程。`;
+}
+
+function hasTranslation(value) {
+  return typeof value?.translation === "string" && value.translation.trim().length > 0;
 }
 
 function autoPrompt(text, grammarAnalysis) {
