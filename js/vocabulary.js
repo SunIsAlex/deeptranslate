@@ -18,35 +18,15 @@ export function saveVocabulary(items) {
 }
 
 export function upsertVocabularyEntry(entry) {
-  const term = normalizeTerm(entry.term);
-  if (!term) return loadVocabulary();
+  return upsertVocabularyEntries([entry]);
+}
+
+export function upsertVocabularyEntries(entries) {
+  if (!Array.isArray(entries) || !entries.length) return loadVocabulary();
 
   const now = new Date().toISOString();
   const items = loadVocabulary();
-  const index = items.findIndex((item) => sameTerm(item.term, term));
-  const nextEntry = {
-    term,
-    translation: String(entry.translation || "").trim(),
-    relation: String(entry.relation || "").trim(),
-    note: String(entry.note || "").trim(),
-    relatedTo: normalizeTerm(entry.relatedTo || ""),
-    source: String(entry.source || "manual").trim(),
-    addedAt: now,
-    updatedAt: now,
-  };
-
-  if (index >= 0) {
-    const existing = items[index];
-    items[index] = {
-      ...existing,
-      ...withoutEmpty(nextEntry),
-      addedAt: existing.addedAt || now,
-      updatedAt: now,
-    };
-  } else {
-    items.unshift(nextEntry);
-  }
-
+  [...entries].reverse().forEach((entry) => upsertEntry(items, entry, now));
   return saveVocabulary(items);
 }
 
@@ -89,6 +69,40 @@ function withoutEmpty(entry) {
     if (value !== "") out[key] = value;
   });
   return out;
+}
+
+function upsertEntry(items, entry, now) {
+  const term = normalizeTerm(entry?.term);
+  if (!term) return;
+
+  const index = items.findIndex((item) => sameTerm(item.term, term));
+  const nextEntry = {
+    term,
+    translation: String(entry.translation || "").trim(),
+    relation: String(entry.relation || "").trim(),
+    note: String(entry.note || "").trim(),
+    relatedTo: normalizeTerm(entry.relatedTo || ""),
+    source: String(entry.source || "manual").trim(),
+    topic: normalizeTerm(entry.topic || ""),
+    category: normalizeTerm(entry.category || ""),
+    partOfSpeech: normalizeTerm(entry.partOfSpeech || ""),
+    example: normalizeTerm(entry.example || ""),
+    exampleTranslation: normalizeTerm(entry.exampleTranslation || ""),
+    addedAt: now,
+    updatedAt: now,
+  };
+
+  if (index >= 0) {
+    const existing = items[index];
+    items[index] = {
+      ...existing,
+      ...withoutEmpty(nextEntry),
+      addedAt: existing.addedAt || now,
+      updatedAt: now,
+    };
+  } else {
+    items.unshift(nextEntry);
+  }
 }
 
 function isValidEntry(entry) {

@@ -180,6 +180,28 @@ export async function fetchRelatedWords({ input, context, model }) {
   return Array.isArray(data?.items) ? data.items : [];
 }
 
+export async function fetchVocabularyHelper({ topic, model }) {
+  const res = await fetch("/api/vocabulary-helper", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, model }),
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // 错误响应可能不是 JSON。
+  }
+
+  if (!res.ok) {
+    const detail = data?.message || data?.detail || data?.error || `主题词汇生成失败 ${res.status}`;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
 export async function fetchPractice({ context, kind, model, history = [], difficulty = 1 }) {
   const res = await fetch("/api/practice", {
     method: "POST",

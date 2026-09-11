@@ -1,6 +1,14 @@
 // DOM 元素引用与通用 DOM 构建工具
 
 export const inputEl = document.getElementById("input-text");
+export const translateToolTabEl = document.getElementById("translate-tool-tab");
+export const vocabularyToolTabEl = document.getElementById("vocabulary-tool-tab");
+export const translationModeOptionEl = document.getElementById("translation-mode-option");
+export const grammarAnalysisOptionEl = document.getElementById("grammar-analysis-option");
+export const targetLanguageEl = document.getElementById("target-language");
+export const inputPanelLabelEl = document.getElementById("input-panel-label");
+export const outputPanelLabelEl = document.getElementById("output-panel-label");
+export const inputHelpEl = document.getElementById("input-help");
 export const modeEl = document.getElementById("mode");
 export const grammarAnalysisEl = document.getElementById("grammar-analysis");
 export const modelEl = document.getElementById("model");

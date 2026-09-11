@@ -723,6 +723,21 @@
     border-bottom: 1px solid var(--border);
   }
   .language-bar { display: flex; align-items: center; min-width: 0; padding-left: 12px; }
+  .tool-switch { display: inline-flex; align-items: center; gap: 2px; }
+  .tool-tab {
+    min-height: 40px;
+    padding: 0 11px;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .tool-tab:hover { background: var(--surface-muted); }
+  .tool-tab.is-active { border-bottom-color: var(--blue); color: var(--blue); }
   .language-choice {
     position: relative;
     display: inline-flex;
@@ -907,6 +922,25 @@
   .sense-zh { font-size: 17px; }
   .highlight-sentence { border: 1px solid #edf0f2; background: #f8fafd; }
 
+  .topic-result { display: grid; gap: 20px; }
+  .topic-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .topic-heading h3 { margin: 0; font-size: 23px; line-height: 1.35; }
+  .topic-subtitle { margin-top: 3px; color: var(--text-secondary); }
+  .topic-category { padding-top: 16px; border-top: 1px solid #e8eaed; }
+  .topic-category:first-of-type { padding-top: 0; border-top: 0; }
+  .topic-category h4 { margin: 0 0 10px; color: var(--text); font-size: 16px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .topic-category h4 span { margin-left: 6px; color: var(--text-secondary); font-size: 13px; font-weight: 400; }
+  .topic-items { display: grid; gap: 8px; }
+  .topic-item { padding: 11px 12px; border: 1px solid #e4e7eb; border-radius: 6px; background: var(--bg); }
+  .topic-item-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .topic-term { font-size: 16px; font-weight: 600; }
+  .topic-pos { margin-left: 6px; color: var(--blue); font-size: 12px; font-style: italic; }
+  .topic-translation { margin-left: 8px; color: var(--text-secondary); }
+  .topic-example { margin: 7px 0 0; line-height: 1.55; }
+  .topic-example-zh { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
+  .topic-save { flex: 0 0 auto; }
+  .vocab-example { margin-top: 3px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+
   @media (max-width: 760px) {
     .site-header { height: 56px; padding: 0 14px; }
     .brand { font-size: 19px; }
@@ -914,6 +948,8 @@
     main.workspace { padding: 16px 12px 36px; }
     .translator-toolbar { align-items: flex-start; min-height: 112px; flex-direction: column; }
     .language-bar { width: 100%; min-height: 58px; padding-left: 8px; }
+    .language-divider { margin-inline: 7px; }
+    .tool-tab { padding-inline: 8px; }
     .translator-settings { width: 100%; min-height: 48px; padding: 0 12px; border-top: 1px solid #eef0f2; }
     .panels, .lower-tools { grid-template-columns: minmax(0, 1fr); }
     .panel { min-height: 280px; padding: 18px 16px 14px; }
@@ -925,6 +961,7 @@
     .practice-toolbar { width: 100%; justify-content: space-between; }
     .vocab-header, .vocab-current, .vocab-item { align-items: stretch; flex-direction: column; }
     .vocab-actions { flex-wrap: wrap; }
+    .topic-heading { align-items: stretch; flex-direction: column; }
   }
 </style>
 </head>
@@ -935,7 +972,7 @@
       <span>DeepTranslate</span>
     </a>
     <div class="header-actions">
-      <span class="header-note">翻译与语法助手</span>
+      <span class="header-note">翻译、语法与词汇助手</span>
     <div class="menu" id="menu">
       <button class="menu-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="更多选项" title="更多选项">
         <span></span><span></span><span></span>
@@ -951,18 +988,22 @@
     <section class="translator" aria-label="翻译工作区">
       <div class="translator-toolbar">
         <div class="language-bar">
-          <label class="language-choice">
+          <div class="tool-switch" role="tablist" aria-label="工具模式">
+            <button class="tool-tab is-active" id="translate-tool-tab" type="button" role="tab" aria-selected="true">翻译</button>
+            <button class="tool-tab" id="vocabulary-tool-tab" type="button" role="tab" aria-selected="false">主题词汇</button>
+          </div>
+          <span class="language-divider" aria-hidden="true"></span>
+          <label class="language-choice" id="translation-mode-option">
             <select id="mode" title="分析模式" aria-label="分析模式">
               <option value="auto">自动检测</option>
               <option value="word">单词</option>
               <option value="sentence">句子</option>
             </select>
           </label>
-          <span class="language-divider" aria-hidden="true"></span>
-          <span class="target-language">中文 / English <small>双向翻译</small></span>
+          <span class="target-language" id="target-language">中文 / English <small>双向翻译</small></span>
         </div>
         <div class="translator-settings">
-    <label class="check-option" title="仅影响英文句子">
+    <label class="check-option" id="grammar-analysis-option" title="仅影响英文句子">
       <input id="grammar-analysis" type="checkbox" checked>
       <span>语法分析</span>
     </label>
@@ -975,18 +1016,18 @@
       <div class="panels">
       <section class="panel source-panel">
         <div class="panel-header">
-          <span class="panel-label">输入文本</span>
+          <span class="panel-label" id="input-panel-label">输入文本</span>
           <span class="keyboard-hint">Ctrl + Enter</span>
         </div>
         <textarea id="input-text" wrap="off" placeholder="输入英文或中文"></textarea>
         <div class="panel-footer">
-          <span class="input-help">支持单词、短语与完整句子</span>
+          <span class="input-help" id="input-help">支持单词、短语与完整句子</span>
           <button id="submit-btn" class="primary-action">翻译</button>
         </div>
       </section>
       <section class="panel output-panel">
         <div class="panel-header">
-          <span class="panel-label">翻译结果</span>
+          <span class="panel-label" id="output-panel-label">翻译结果</span>
         </div>
         <div class="output" id="output">
           <div class="output-placeholder">翻译结果会显示在这里</div>

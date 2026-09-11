@@ -1,6 +1,9 @@
 // 入口控制器：提交流程、加载日志、路由恢复、复制、事件绑定
 import {
-  inputEl, modeEl, grammarAnalysisEl, modelEl,
+  inputEl, translateToolTabEl, vocabularyToolTabEl,
+  translationModeOptionEl, grammarAnalysisOptionEl, targetLanguageEl,
+  inputPanelLabelEl, outputPanelLabelEl, inputHelpEl,
+  modeEl, grammarAnalysisEl, modelEl,
   submitBtn, statusEl, outputEl, copyBtn,
   followUpEl, followUpThreadEl, followUpInputEl, followUpBtn,
   vocabCountEl, vocabCurrentEl, vocabCurrentTermEl, vocabCurrentMetaEl,
@@ -9,7 +12,14 @@ import {
   practiceEl, practiceKindEl, generatePracticeBtn, practiceBodyEl, practiceStatusEl,
   practiceCountEl, clearPracticeHistoryBtn,
 } from "./js/dom.js";
-import { askFollowUp, detectDirection, fetchPractice, fetchRelatedWords, translate } from "./js/api.js";
+import {
+  askFollowUp,
+  detectDirection,
+  fetchPractice,
+  fetchRelatedWords,
+  fetchVocabularyHelper,
+  translate,
+} from "./js/api.js";
 import { render, renderMarkdown, renderStreaming } from "./js/render.js";
 import {
   clearVocabulary,
@@ -18,6 +28,7 @@ import {
   normalizeTerm,
   removeVocabularyEntry,
   upsertVocabularyEntry,
+  upsertVocabularyEntries,
 } from "./js/vocabulary.js";
 import {
   addPracticeHistory,
@@ -33,6 +44,7 @@ let followUpHistory = [];
 let followUpController = null;
 let currentPractice = null;
 let practiceHistory = [];
+let currentTool = "translate";
 
 // ── 加载日志与状态 ──────────────────────────────
 function setStage(line) {
@@ -51,6 +63,42 @@ function setStatus(msg) {
 // ── 小工具 ─────────────────────────────────────
 function truncate(s, n) {
   return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function setToolTabsDisabled(disabled) {
+  translateToolTabEl.disabled = disabled;
+  vocabularyToolTabEl.disabled = disabled;
+}
+
+function setToolMode(tool) {
+  if (tool === currentTool) return;
+  currentTool = tool;
+  resetFollowUp();
+  resetVocabCurrent();
+  resetPractice();
+  inputEl.value = "";
+  statusEl.textContent = "";
+  copyBtn.hidden = true;
+
+  const isVocabulary = tool === "vocabulary";
+  translateToolTabEl.classList.toggle("is-active", !isVocabulary);
+  vocabularyToolTabEl.classList.toggle("is-active", isVocabulary);
+  translateToolTabEl.setAttribute("aria-selected", String(!isVocabulary));
+  vocabularyToolTabEl.setAttribute("aria-selected", String(isVocabulary));
+  translationModeOptionEl.hidden = isVocabulary;
+  grammarAnalysisOptionEl.hidden = isVocabulary;
+  targetLanguageEl.innerHTML = isVocabulary
+    ? "English <small>按主题学习</small>"
+    : "中文 / English <small>双向翻译</small>";
+  inputPanelLabelEl.textContent = isVocabulary ? "输入主题" : "输入文本";
+  outputPanelLabelEl.textContent = isVocabulary ? "主题词汇" : "翻译结果";
+  inputEl.placeholder = isVocabulary ? "例如：fitness、健康、online safety" : "输入英文或中文";
+  if (isVocabulary) inputEl.setAttribute("maxlength", "80");
+  else inputEl.removeAttribute("maxlength");
+  inputHelpEl.textContent = isVocabulary ? "支持中文或英文主题" : "支持单词、短语与完整句子";
+  submitBtn.textContent = isVocabulary ? "生成词汇" : "翻译";
+  outputEl.innerHTML = `<div class="output-placeholder">${isVocabulary ? "分类词汇会显示在这里" : "翻译结果会显示在这里"}</div>`;
+  inputEl.focus();
 }
 
 function resetFollowUp() {
@@ -236,7 +284,9 @@ function relationLabel(value) {
 
 function vocabNote(item) {
   const parts = [];
+  if (item.category) parts.push(item.category);
   if (item.relation) parts.push(relationLabel(item.relation));
+  if (item.partOfSpeech) parts.push(item.partOfSpeech);
   if (item.translation || item.note) parts.push(item.translation || item.note);
   return parts.join(" · ");
 }
@@ -302,6 +352,14 @@ function renderVocabulary() {
     note.className = "vocab-note";
     note.textContent = vocabNote(item);
     info.append(term, note);
+    if (item.example) {
+      const example = document.createElement("div");
+      example.className = "vocab-example";
+      example.textContent = item.exampleTranslation
+        ? `${item.example} — ${item.exampleTranslation}`
+        : item.example;
+      info.appendChild(example);
+    }
 
     const actions = document.createElement("div");
     actions.className = "vocab-actions";
@@ -310,6 +368,7 @@ function renderVocabulary() {
     searchBtn.type = "button";
     searchBtn.textContent = "查询";
     searchBtn.addEventListener("click", () => {
+      if (currentTool !== "translate") setToolMode("translate");
       inputEl.value = item.term;
       modeEl.value = "word";
       handleSubmit();
@@ -368,6 +427,131 @@ function renderRelatedSuggestions(items) {
   });
 }
 
+function topicVocabularyEntries(data) {
+  return (data.categories || []).flatMap((category) => {
+    const categoryLabel = [category.nameZh, category.nameEn].filter(Boolean).join(" / ");
+    return (category.items || []).map((item) => ({
+      ...item,
+      topic: data.topic,
+      category: categoryLabel,
+      relatedTo: data.topic,
+      source: "topic",
+    }));
+  });
+}
+
+function renderTopicVocabulary(data) {
+  outputEl.innerHTML = "";
+  const root = document.createElement("div");
+  root.className = "topic-result";
+
+  const heading = document.createElement("div");
+  heading.className = "topic-heading";
+  const titleWrap = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = data.topic;
+  titleWrap.appendChild(title);
+  if (data.topicTranslation && data.topicTranslation.toLowerCase() !== data.topic.toLowerCase()) {
+    const subtitle = document.createElement("div");
+    subtitle.className = "topic-subtitle";
+    subtitle.textContent = data.topicTranslation;
+    titleWrap.appendChild(subtitle);
+  }
+
+  const saveAllBtn = document.createElement("button");
+  saveAllBtn.className = "secondary-btn";
+  saveAllBtn.type = "button";
+  saveAllBtn.textContent = "全部加入生词本";
+  saveAllBtn.addEventListener("click", () => {
+    const entries = topicVocabularyEntries(data);
+    const newCount = entries.filter((item) => !hasVocabularyEntry(item.term)).length;
+    upsertVocabularyEntries(entries);
+    renderVocabulary();
+    renderTopicVocabulary(data);
+    const skippedCount = entries.length - newCount;
+    setStatus(`新增 ${newCount} 个，跳过 ${skippedCount} 个已有词条`);
+  });
+  if (topicVocabularyEntries(data).every((item) => hasVocabularyEntry(item.term))) {
+    saveAllBtn.disabled = true;
+    saveAllBtn.textContent = "已全部加入";
+  }
+  heading.append(titleWrap, saveAllBtn);
+  root.appendChild(heading);
+
+  (data.categories || []).forEach((category) => {
+    const section = document.createElement("section");
+    section.className = "topic-category";
+    const categoryTitle = document.createElement("h4");
+    categoryTitle.textContent = category.nameZh || category.nameEn;
+    if (category.nameZh && category.nameEn) {
+      const enName = document.createElement("span");
+      enName.textContent = category.nameEn;
+      categoryTitle.appendChild(enName);
+    }
+    const items = document.createElement("div");
+    items.className = "topic-items";
+
+    (category.items || []).forEach((item) => {
+      const row = document.createElement("article");
+      row.className = "topic-item";
+      const main = document.createElement("div");
+      main.className = "topic-item-main";
+      const label = document.createElement("div");
+      const term = document.createElement("span");
+      term.className = "topic-term";
+      term.textContent = item.term;
+      label.appendChild(term);
+      if (item.partOfSpeech) {
+        const pos = document.createElement("span");
+        pos.className = "topic-pos";
+        pos.textContent = item.partOfSpeech;
+        label.appendChild(pos);
+      }
+      const translation = document.createElement("span");
+      translation.className = "topic-translation";
+      translation.textContent = item.translation;
+      label.appendChild(translation);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "text-btn topic-save";
+      saveBtn.type = "button";
+      const saved = hasVocabularyEntry(item.term);
+      saveBtn.textContent = saved ? "已加入" : "加入";
+      saveBtn.disabled = saved;
+      saveBtn.addEventListener("click", () => {
+        const categoryLabel = [category.nameZh, category.nameEn].filter(Boolean).join(" / ");
+        upsertVocabularyEntry({
+          ...item,
+          topic: data.topic,
+          category: categoryLabel,
+          relatedTo: data.topic,
+          source: "topic",
+        });
+        renderVocabulary();
+        renderTopicVocabulary(data);
+        setStatus(`已加入 ${item.term}`);
+      });
+      main.append(label, saveBtn);
+
+      const example = document.createElement("p");
+      example.className = "topic-example";
+      example.textContent = item.example;
+      row.append(main, example);
+      if (item.exampleTranslation) {
+        const exampleZh = document.createElement("p");
+        exampleZh.className = "topic-example-zh";
+        exampleZh.textContent = item.exampleTranslation;
+        row.appendChild(exampleZh);
+      }
+      items.appendChild(row);
+    });
+    section.append(categoryTitle, items);
+    root.appendChild(section);
+  });
+
+  outputEl.appendChild(root);
+}
+
 // ── 提交流程 ───────────────────────────────────
 async function handleSubmit() {
   const text = inputEl.value.trim();
@@ -381,6 +565,7 @@ async function handleSubmit() {
   resetVocabCurrent();
   resetPractice();
   submitBtn.disabled = true;
+  setToolTabsDisabled(true);
   copyBtn.hidden = true;
   setStatus("");
 
@@ -445,7 +630,44 @@ async function handleSubmit() {
     setStatus(`网络错误：${err.message}`);
   } finally {
     submitBtn.disabled = false;
+    setToolTabsDisabled(false);
   }
+}
+
+async function handleVocabularySubmit() {
+  const topic = inputEl.value.replace(/\s+/g, " ").trim();
+  if (!topic) {
+    setStatus("请输入主题");
+    return;
+  }
+
+  outputEl.innerHTML = "";
+  resetFollowUp();
+  resetVocabCurrent();
+  resetPractice();
+  submitBtn.disabled = true;
+  setToolTabsDisabled(true);
+  copyBtn.hidden = true;
+  setStatus("");
+  setStage(`> topic: "${truncate(topic, 50)}"`);
+  setStage(`> model: ${modelEl.value}  |  target: 20 words / 4 categories`);
+
+  try {
+    const data = await fetchVocabularyHelper({ topic, model: modelEl.value });
+    renderTopicVocabulary(data);
+    const count = topicVocabularyEntries(data).length;
+    setStatus(`已生成 ${count} 个词条`);
+  } catch (error) {
+    setStage(`> ERROR: ${error.message}`);
+    setStatus(`生成失败：${error.message}`);
+  } finally {
+    submitBtn.disabled = false;
+    setToolTabsDisabled(false);
+  }
+}
+
+function handlePrimarySubmit() {
+  return currentTool === "vocabulary" ? handleVocabularySubmit() : handleSubmit();
 }
 
 async function handleFollowUp() {
@@ -517,7 +739,9 @@ function updateUrl(data, text) {
 }
 
 // ── 事件绑定 ───────────────────────────────────
-submitBtn.addEventListener("click", handleSubmit);
+submitBtn.addEventListener("click", handlePrimarySubmit);
+translateToolTabEl.addEventListener("click", () => setToolMode("translate"));
+vocabularyToolTabEl.addEventListener("click", () => setToolMode("vocabulary"));
 followUpBtn.addEventListener("click", handleFollowUp);
 
 generatePracticeBtn.addEventListener("click", async () => {
@@ -609,7 +833,7 @@ clearVocabBtn.addEventListener("click", () => {
 inputEl.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
     e.preventDefault();
-    handleSubmit();
+    handlePrimarySubmit();
   }
 });
 
