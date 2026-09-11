@@ -11,6 +11,7 @@ export const outputPanelLabelEl = document.getElementById("output-panel-label");
 export const inputHelpEl = document.getElementById("input-help");
 export const modeEl = document.getElementById("mode");
 export const grammarAnalysisEl = document.getElementById("grammar-analysis");
+export const vocabularyDifficultyEl = document.getElementById("vocabulary-difficulty");
 export const modelEl = document.getElementById("model");
 export const submitBtn = document.getElementById("submit-btn");
 export const statusEl = document.getElementById("status");

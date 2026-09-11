@@ -785,6 +785,8 @@
   .check-option input { width: 15px; height: 15px; }
   .model-select { max-width: 126px; padding: 8px 7px; color: var(--text-secondary); font-size: 13px; }
   .model-select:hover { background: var(--surface-muted); }
+  .difficulty-select { max-width: 132px; padding: 8px 7px; color: var(--text-secondary); font-size: 13px; }
+  .difficulty-select:hover { background: var(--surface-muted); }
 
   .panels {
     display: grid;
@@ -1007,6 +1009,12 @@
       <input id="grammar-analysis" type="checkbox" checked>
       <span>语法分析</span>
     </label>
+    <select class="difficulty-select" id="vocabulary-difficulty" title="主题词汇难度" aria-label="主题词汇难度" hidden>
+      <option value="beginner">基础 A1–A2</option>
+      <option value="intermediate">中级 B1–B2</option>
+      <option value="advanced" selected>进阶 B2–C1</option>
+      <option value="expert">专家 C1–C2</option>
+    </select>
     <select class="model-select" id="model" title="DeepSeek 模型" aria-label="DeepSeek 模型">
       <option value="deepseek-v4-flash">V4 Flash</option>
       <option value="deepseek-v4-pro">V4 Pro</option>

@@ -11,8 +11,15 @@ import {
 const MAX_TOPIC_LENGTH = 80;
 const MAX_CATEGORIES = 4;
 const MAX_ITEMS_PER_CATEGORY = 5;
+const DEFAULT_DIFFICULTY = "advanced";
+const DIFFICULTY_INSTRUCTIONS = {
+  beginner: "CEFR A1-A2. Use high-frequency everyday vocabulary and simple, direct example sentences.",
+  intermediate: "CEFR B1-B2. Use practical vocabulary, common collocations, and moderately varied examples.",
+  advanced: "CEFR B2-C1. Prefer precise, idiomatic, and context-specific vocabulary; avoid elementary words unless essential to the topic.",
+  expert: "CEFR C1-C2. Use nuanced, sophisticated, domain-specific, and idiomatic vocabulary with natural advanced examples.",
+};
 
-const SYSTEM = `You are a vocabulary curriculum designer for Chinese-speaking English learners at CEFR A2-B2.
+const SYSTEM = `You are a vocabulary curriculum designer for Chinese-speaking English learners.
 Given a topic in English or Chinese, create a practical bilingual vocabulary set for real communication.
 Return strict JSON only with this shape:
 {
@@ -37,7 +44,7 @@ Rules:
 - Create exactly 4 categories that naturally fit the topic; do not use generic part-of-speech or difficulty categories.
 - Create exactly 5 distinct, useful items per category (20 items total).
 - Include a balanced mix of words, collocations, and short phrases where appropriate.
-- Keep examples concise, natural, and suitable for A2-B2 learners.
+- Follow the requested CEFR level closely in both vocabulary choice and examples.
 - Do not repeat a term across categories.
 - English terms must use lowercase unless they contain a proper noun.
 - Return JSON only, with no markdown or commentary.`;
@@ -56,13 +63,23 @@ export async function onRequestPost(context) {
   if (topic.length > MAX_TOPIC_LENGTH) {
     return json({ error: "topic_too_long" }, 400, CORS);
   }
+  const difficulty = body.difficulty === undefined || body.difficulty === ""
+    ? DEFAULT_DIFFICULTY
+    : String(body.difficulty);
+  if (!Object.hasOwn(DIFFICULTY_INSTRUCTIONS, difficulty)) {
+    return json({ error: "invalid_difficulty" }, 400, CORS);
+  }
   if (!envValue(env, "DEEPSEEK_API_KEY")) {
     return json({ error: "server_not_configured" }, 500, CORS);
   }
 
   let upstream;
   try {
-    upstream = await callModel(`Topic: ${topic}`, env, SYSTEM, body.model);
+    const prompt = [
+      `Topic: ${topic}`,
+      `Target difficulty: ${DIFFICULTY_INSTRUCTIONS[difficulty]}`,
+    ].join("\n");
+    upstream = await callModel(prompt, env, SYSTEM, body.model);
   } catch (error) {
     return json({ error: "upstream_unavailable", detail: String(error) }, 502, CORS);
   }
@@ -86,6 +103,7 @@ export async function onRequestPost(context) {
   return json(cleanCJKSpaces({
     topic,
     topicTranslation: limitText(data.topicTranslation, 80),
+    difficulty,
     categories,
   }), 200, CORS);
 }

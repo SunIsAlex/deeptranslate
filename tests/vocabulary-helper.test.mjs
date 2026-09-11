@@ -41,6 +41,7 @@ test("vocabulary helper accepts a Chinese topic and normalizes model output", as
     assert.equal(response.status, 200);
     assert.equal(result.topic, "网络安全");
     assert.equal(result.topicTranslation, "网络安全");
+    assert.equal(result.difficulty, "advanced");
     assert.equal(result.categories.length, 4);
     assert.equal(result.categories[0].items.length, 5);
     assert.equal(result.categories[1].items.length, 5);
@@ -48,6 +49,8 @@ test("vocabulary helper accepts a Chinese topic and normalizes model output", as
     assert.equal(result.categories[0].items[0].translation, "释义 1");
     assert.equal(modelRequest.model, "deepseek-v4-flash");
     assert.match(modelRequest.messages[0].content, /exactly 4 categories/);
+    assert.match(modelRequest.messages[1].content, /CEFR B2-C1/);
+    assert.match(modelRequest.messages[1].content, /avoid elementary words/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -67,6 +70,13 @@ test("vocabulary helper validates requests and empty model results", async () =>
   });
   assert.equal(longResponse.status, 400);
   assert.equal((await longResponse.json()).error, "topic_too_long");
+
+  const invalidDifficultyResponse = await onRequestPost({
+    request: helperRequest("fitness", "impossible"),
+    env: { DEEPSEEK_API_KEY: "test-key" },
+  });
+  assert.equal(invalidDifficultyResponse.status, 400);
+  assert.equal((await invalidDifficultyResponse.json()).error, "invalid_difficulty");
 
   const unconfiguredResponse = await onRequestPost({
     request: helperRequest("fitness"),
@@ -152,11 +162,11 @@ test("batch vocabulary writes enforce the 500-item limit", () => {
   assert.equal(items[499].term, "term-499");
 });
 
-function helperRequest(topic) {
+function helperRequest(topic, difficulty = "advanced") {
   return new Request("https://translate.sunisalex.org/api/vocabulary-helper", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, model: "deepseek-v4-flash" }),
+    body: JSON.stringify({ topic, difficulty, model: "deepseek-v4-flash" }),
   });
 }
 

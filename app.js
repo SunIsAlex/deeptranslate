@@ -3,7 +3,7 @@ import {
   inputEl, translateToolTabEl, vocabularyToolTabEl,
   translationModeOptionEl, grammarAnalysisOptionEl, targetLanguageEl,
   inputPanelLabelEl, outputPanelLabelEl, inputHelpEl,
-  modeEl, grammarAnalysisEl, modelEl,
+  modeEl, grammarAnalysisEl, vocabularyDifficultyEl, modelEl,
   submitBtn, statusEl, outputEl, copyBtn,
   followUpEl, followUpThreadEl, followUpInputEl, followUpBtn,
   vocabCountEl, vocabCurrentEl, vocabCurrentTermEl, vocabCurrentMetaEl,
@@ -87,6 +87,7 @@ function setToolMode(tool) {
   vocabularyToolTabEl.setAttribute("aria-selected", String(isVocabulary));
   translationModeOptionEl.hidden = isVocabulary;
   grammarAnalysisOptionEl.hidden = isVocabulary;
+  vocabularyDifficultyEl.hidden = !isVocabulary;
   targetLanguageEl.innerHTML = isVocabulary
     ? "English <small>按主题学习</small>"
     : "中文 / English <small>双向翻译</small>";
@@ -440,6 +441,16 @@ function topicVocabularyEntries(data) {
   });
 }
 
+function vocabularyDifficultyLabel(value) {
+  const labels = {
+    beginner: "基础 A1–A2",
+    intermediate: "中级 B1–B2",
+    advanced: "进阶 B2–C1",
+    expert: "专家 C1–C2",
+  };
+  return labels[value] || labels.advanced;
+}
+
 function renderTopicVocabulary(data) {
   outputEl.innerHTML = "";
   const root = document.createElement("div");
@@ -451,10 +462,15 @@ function renderTopicVocabulary(data) {
   const title = document.createElement("h3");
   title.textContent = data.topic;
   titleWrap.appendChild(title);
+  const subtitleParts = [];
   if (data.topicTranslation && data.topicTranslation.toLowerCase() !== data.topic.toLowerCase()) {
+    subtitleParts.push(data.topicTranslation);
+  }
+  subtitleParts.push(vocabularyDifficultyLabel(data.difficulty));
+  if (subtitleParts.length) {
     const subtitle = document.createElement("div");
     subtitle.className = "topic-subtitle";
-    subtitle.textContent = data.topicTranslation;
+    subtitle.textContent = subtitleParts.join(" · ");
     titleWrap.appendChild(subtitle);
   }
 
@@ -650,10 +666,15 @@ async function handleVocabularySubmit() {
   copyBtn.hidden = true;
   setStatus("");
   setStage(`> topic: "${truncate(topic, 50)}"`);
+  setStage(`> difficulty: ${vocabularyDifficultyLabel(vocabularyDifficultyEl.value)}`);
   setStage(`> model: ${modelEl.value}  |  target: 20 words / 4 categories`);
 
   try {
-    const data = await fetchVocabularyHelper({ topic, model: modelEl.value });
+    const data = await fetchVocabularyHelper({
+      topic,
+      difficulty: vocabularyDifficultyEl.value,
+      model: modelEl.value,
+    });
     renderTopicVocabulary(data);
     const count = topicVocabularyEntries(data).length;
     setStatus(`已生成 ${count} 个词条`);

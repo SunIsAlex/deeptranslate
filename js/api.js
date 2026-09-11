@@ -180,11 +180,11 @@ export async function fetchRelatedWords({ input, context, model }) {
   return Array.isArray(data?.items) ? data.items : [];
 }
 
-export async function fetchVocabularyHelper({ topic, model }) {
+export async function fetchVocabularyHelper({ topic, difficulty, model }) {
   const res = await fetch("/api/vocabulary-helper", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, model }),
+    body: JSON.stringify({ topic, difficulty, model }),
   });
 
   let data = null;

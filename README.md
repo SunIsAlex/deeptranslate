@@ -11,7 +11,7 @@
   - 短语动词：逐义项中文释义与英文解释、用法与可分性、例句（如 pay off）
   - 句子：地道翻译、句法成分着色高亮、语法点提示
 - **中译英**：短语给 2-4 个备选表达及语域区别，句子给单一最地道译法
-- **主题词汇助手**：输入中英文主题，生成约 20 个 A2-B2 实用词汇，按 4 个主题相关类别展示双语释义和例句
+- **主题词汇助手**：输入中英文主题，按基础 A1-A2、中级 B1-B2、进阶 B2-C1 或专家 C1-C2 难度生成约 20 个词汇，并按 4 个主题相关类别展示双语释义和例句
 - **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
@@ -167,10 +167,14 @@ edgeone pages dev         # 本地起调试服务
 ### POST /api/vocabulary-helper（主题词汇助手）
 
 ```json
-{ "topic": "online safety", "model": "deepseek-v4-flash" }
+{
+  "topic": "online safety",
+  "difficulty": "advanced",
+  "model": "deepseek-v4-flash"
+}
 ```
 
-接受不超过 80 个字符的中文或英文主题。返回 `topicTranslation` 和 `categories`；默认包含 4 个与主题相关的动态类别，每类约 5 个词汇或短语。每个词条包含 `term`、`partOfSpeech`、`translation`、`example` 和 `exampleTranslation`。
+接受不超过 80 个字符的中文或英文主题。`difficulty` 可选 `beginner`（A1-A2）、`intermediate`（B1-B2）、`advanced`（B2-C1，默认）或 `expert`（C1-C2）。返回所用难度、`topicTranslation` 和 `categories`；默认包含 4 个与主题相关的动态类别，每类约 5 个词汇或短语。每个词条包含 `term`、`partOfSpeech`、`translation`、`example` 和 `exampleTranslation`。
 
 ## 路由
 
