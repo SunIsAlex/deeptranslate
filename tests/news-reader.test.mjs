@@ -86,6 +86,75 @@ test("news reader validates input and reports upstream failures", async () => {
   }
 });
 
+test("news reader scans every output message instead of trusting the first text", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return jsonResponse({
+      status: "completed",
+      output: [
+        { type: "message", content: [{ type: "output_text", text: "Search completed." }] },
+        { type: "web_search_call", id: "search-1", status: "completed", action: { type: "search", query: "AI" } },
+        { type: "message", content: [{ type: "output_text", text: JSON.stringify({
+          articles: [article({ sourceUrl: "https://example.com/final", title: "Final report" })],
+        }) }] },
+      ],
+    });
+  };
+
+  try {
+    const response = await onRequestPost({
+      request: newsRequest("AI"),
+      env: { DEEPSEEK_API_KEY: "test-key" },
+    });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.articles[0].title, "Final report");
+    assert.equal(calls, 1, "a parseable later message should not trigger repair");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("news reader repairs malformed output using the existing web-search context", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const responses = [
+    jsonResponse({
+      status: "completed",
+      output: [
+        { type: "web_search_call", id: "search-1", status: "completed", action: { type: "search", query: "climate" } },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: '{"articles":[' }] },
+      ],
+    }),
+    responsesApiResult(JSON.stringify({
+      articles: [article({ sourceUrl: "https://example.com/repaired", title: "Repaired report" })],
+    })),
+  ];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body));
+    return responses.shift();
+  };
+
+  try {
+    const response = await onRequestPost({
+      request: newsRequest("climate"),
+      env: { DEEPSEEK_API_KEY: "test-key" },
+    });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.articles[0].title, "Repaired report");
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].tool_choice, "none");
+    assert.equal(requests[1].tools, undefined);
+    assert.ok(requests[1].input.some((item) => item.type === "web_search_call"));
+    assert.match(requests[1].input.at(-1).content, /valid JSON/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("news highlight parser separates phrases and grammar without producing HTML", () => {
   assert.deepEqual(
     parseNewsHighlights("Officials [[rolled out]] rules that {{are expected to reduce fraud}}."),
@@ -134,12 +203,16 @@ function newsRequest(query) {
 }
 
 function responsesApiResult(text) {
-  return new Response(JSON.stringify({
+  return jsonResponse({
     output: [{
       type: "message",
       content: [{ type: "output_text", text }],
     }],
-  }), {
+  });
+}
+
+function jsonResponse(value) {
+  return new Response(JSON.stringify(value), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });

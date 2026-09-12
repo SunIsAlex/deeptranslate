@@ -105,29 +105,14 @@ export async function onRequestPost(context) {
 
   let upstream;
   try {
-    upstream = await fetch(responsesApiUrl(env), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: resolveModel(body.model, env),
-        instructions: INSTRUCTIONS,
-        input: prompt,
-        tools: [{ type: "web_search" }],
-        tool_choice: { type: "web_search" },
-        max_output_tokens: 12000,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "english_news_digest",
-            strict: true,
-            schema: RESPONSE_SCHEMA,
-          },
-        },
-      }),
-      eo: { timeoutSetting: { connectTimeout: 5000, readTimeout: 120000, writeTimeout: 5000 } },
+    upstream = await requestResponses(env, apiKey, {
+      model: resolveModel(body.model, env),
+      instructions: INSTRUCTIONS,
+      input: prompt,
+      tools: [{ type: "web_search" }],
+      tool_choice: { type: "web_search" },
+      max_output_tokens: 12000,
+      text: responseTextFormat(),
     });
   } catch (error) {
     return json({ error: "upstream_unavailable", detail: String(error) }, 502, CORS);
@@ -138,14 +123,32 @@ export async function onRequestPost(context) {
     return json({ error: "upstream_error", status: upstream.status, detail }, 502, CORS);
   }
 
-  let modelResult;
+  let raw;
   try {
-    const raw = await upstream.json();
-    modelResult = parseModelObject(responseOutputText(raw));
+    raw = await upstream.json();
   } catch (error) {
     return json({ error: "bad_model_json", detail: String(error) }, 502, CORS);
   }
-  if (!modelResult) return json({ error: "bad_model_json" }, 502, CORS);
+
+  let modelResult = parseResponseObject(raw);
+  if (!modelResult) {
+    const repaired = await repairSearchResponse({
+      env,
+      apiKey,
+      model: resolveModel(body.model, env),
+      prompt,
+      searchResponse: raw,
+    });
+    if (repaired.errorResponse) return repaired.errorResponse;
+    modelResult = parseResponseObject(repaired.raw);
+    if (!modelResult) {
+      return json({
+        error: "bad_model_json",
+        upstreamStatus: repaired.raw?.status || raw?.status || "unknown",
+        outputTypes: responseOutputTypes(repaired.raw || raw),
+      }, 502, CORS);
+    }
+  }
 
   const articles = normalizeArticles(modelResult.articles);
   if (!articles.length) return json({ error: "empty_search_result" }, 502, CORS);
@@ -157,15 +160,112 @@ export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: OPTIONS_HEADERS });
 }
 
-function responseOutputText(data) {
-  if (typeof data?.output_text === "string") return data.output_text;
+function parseResponseObject(data) {
+  const directObjects = [];
+  const textCandidates = [];
+  if (typeof data?.output_text === "string") textCandidates.push(data.output_text);
+
   for (const item of Array.isArray(data?.output) ? data.output : []) {
     if (item?.type !== "message") continue;
+    const messageParts = [];
     for (const part of Array.isArray(item.content) ? item.content : []) {
-      if (part?.type === "output_text" && typeof part.text === "string") return part.text;
+      if (part?.json && typeof part.json === "object" && !Array.isArray(part.json)) {
+        directObjects.push(part.json);
+      }
+      if (typeof part?.text === "string") {
+        textCandidates.push(part.text);
+        messageParts.push(part.text);
+      }
     }
+    if (messageParts.length > 1) textCandidates.push(messageParts.join(""));
   }
-  return "";
+
+  for (const candidate of directObjects.reverse()) {
+    if (candidate && typeof candidate === "object") return candidate;
+  }
+  for (const candidate of textCandidates.reverse()) {
+    const parsed = parseModelObject(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+async function repairSearchResponse({ env, apiKey, model, prompt, searchResponse }) {
+  const contextItems = (Array.isArray(searchResponse?.output) ? searchResponse.output : [])
+    .filter((item) => item?.type === "message" || item?.type === "web_search_call");
+  const input = [
+    { role: "user", content: prompt },
+    ...contextItems,
+    {
+      role: "user",
+      content: "Using the web-search results above, return the complete news digest again as valid JSON matching the required schema. Do not search again and do not add markdown fences.",
+    },
+  ];
+
+  let upstream;
+  try {
+    upstream = await requestResponses(env, apiKey, {
+      model,
+      instructions: INSTRUCTIONS,
+      input,
+      tool_choice: "none",
+      max_output_tokens: 12000,
+      text: responseTextFormat(),
+    });
+  } catch (error) {
+    return {
+      errorResponse: json({ error: "upstream_unavailable", detail: String(error) }, 502, CORS),
+    };
+  }
+
+  if (!upstream.ok) {
+    const detail = await upstream.text();
+    return {
+      errorResponse: json({
+        error: "upstream_error",
+        phase: "repair",
+        status: upstream.status,
+        detail,
+      }, 502, CORS),
+    };
+  }
+
+  try {
+    return { raw: await upstream.json() };
+  } catch (error) {
+    return {
+      errorResponse: json({ error: "bad_model_json", phase: "repair", detail: String(error) }, 502, CORS),
+    };
+  }
+}
+
+function requestResponses(env, apiKey, payload) {
+  return fetch(responsesApiUrl(env), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+    eo: { timeoutSetting: { connectTimeout: 5000, readTimeout: 120000, writeTimeout: 5000 } },
+  });
+}
+
+function responseTextFormat() {
+  return {
+    format: {
+      type: "json_schema",
+      name: "english_news_digest",
+      strict: true,
+      schema: RESPONSE_SCHEMA,
+    },
+  };
+}
+
+function responseOutputTypes(data) {
+  return [...new Set((Array.isArray(data?.output) ? data.output : [])
+    .map((item) => String(item?.type || "unknown")))]
+    .slice(0, 10);
 }
 
 function normalizeArticles(value) {
