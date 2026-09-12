@@ -1,6 +1,6 @@
 // 入口控制器：提交流程、加载日志、路由恢复、复制、事件绑定
 import {
-  inputEl, translateToolTabEl, vocabularyToolTabEl,
+  inputEl, translateToolTabEl, vocabularyToolTabEl, newsToolTabEl,
   translationModeOptionEl, grammarAnalysisOptionEl, targetLanguageEl,
   inputPanelLabelEl, outputPanelLabelEl, inputHelpEl,
   modeEl, grammarAnalysisEl, vocabularyDifficultyEl, modelEl,
@@ -15,11 +15,13 @@ import {
 import {
   askFollowUp,
   detectDirection,
+  fetchLatestNews,
   fetchPractice,
   fetchRelatedWords,
   fetchVocabularyHelper,
   translate,
 } from "./js/api.js";
+import { parseNewsHighlights } from "./js/news.js";
 import { render, renderMarkdown, renderStreaming } from "./js/render.js";
 import {
   clearVocabulary,
@@ -68,6 +70,7 @@ function truncate(s, n) {
 function setToolTabsDisabled(disabled) {
   translateToolTabEl.disabled = disabled;
   vocabularyToolTabEl.disabled = disabled;
+  newsToolTabEl.disabled = disabled;
 }
 
 function setToolMode(tool) {
@@ -80,25 +83,45 @@ function setToolMode(tool) {
   statusEl.textContent = "";
   copyBtn.hidden = true;
 
+  const isTranslate = tool === "translate";
   const isVocabulary = tool === "vocabulary";
-  translateToolTabEl.classList.toggle("is-active", !isVocabulary);
+  const isNews = tool === "news";
+  translateToolTabEl.classList.toggle("is-active", isTranslate);
   vocabularyToolTabEl.classList.toggle("is-active", isVocabulary);
-  translateToolTabEl.setAttribute("aria-selected", String(!isVocabulary));
+  newsToolTabEl.classList.toggle("is-active", isNews);
+  translateToolTabEl.setAttribute("aria-selected", String(isTranslate));
   vocabularyToolTabEl.setAttribute("aria-selected", String(isVocabulary));
-  translationModeOptionEl.hidden = isVocabulary;
-  grammarAnalysisOptionEl.hidden = isVocabulary;
+  newsToolTabEl.setAttribute("aria-selected", String(isNews));
+  translationModeOptionEl.hidden = !isTranslate;
+  grammarAnalysisOptionEl.hidden = !isTranslate;
   vocabularyDifficultyEl.hidden = !isVocabulary;
   targetLanguageEl.innerHTML = isVocabulary
     ? "English <small>按主题学习</small>"
-    : "中文 / English <small>双向翻译</small>";
-  inputPanelLabelEl.textContent = isVocabulary ? "输入主题" : "输入文本";
-  outputPanelLabelEl.textContent = isVocabulary ? "主题词汇" : "翻译结果";
-  inputEl.placeholder = isVocabulary ? "例如：fitness、健康、online safety" : "输入英文或中文";
+    : isNews
+      ? "English News <small>联网搜索</small>"
+      : "中文 / English <small>双向翻译</small>";
+  inputPanelLabelEl.textContent = isVocabulary ? "输入主题" : isNews ? "搜索内容" : "输入文本";
+  outputPanelLabelEl.textContent = isVocabulary ? "主题词汇" : isNews ? "最新英文新闻" : "翻译结果";
+  inputEl.placeholder = isVocabulary
+    ? "例如：fitness、健康、online safety"
+    : isNews
+      ? "例如：artificial intelligence、气候变化、英超"
+      : "输入英文或中文";
   if (isVocabulary) inputEl.setAttribute("maxlength", "80");
+  else if (isNews) inputEl.setAttribute("maxlength", "120");
   else inputEl.removeAttribute("maxlength");
-  inputHelpEl.textContent = isVocabulary ? "支持中文或英文主题" : "支持单词、短语与完整句子";
-  submitBtn.textContent = isVocabulary ? "生成词汇" : "翻译";
-  outputEl.innerHTML = `<div class="output-placeholder">${isVocabulary ? "分类词汇会显示在这里" : "翻译结果会显示在这里"}</div>`;
+  inputHelpEl.textContent = isVocabulary
+    ? "支持中文或英文主题"
+    : isNews
+      ? "搜索近期英文报道并生成学习摘要"
+      : "支持单词、短语与完整句子";
+  submitBtn.textContent = isVocabulary ? "生成词汇" : isNews ? "搜索新闻" : "翻译";
+  const placeholder = isVocabulary
+    ? "分类词汇会显示在这里"
+    : isNews
+      ? "新闻摘要与语言知识会显示在这里"
+      : "翻译结果会显示在这里";
+  outputEl.innerHTML = `<div class="output-placeholder">${placeholder}</div>`;
   inputEl.focus();
 }
 
@@ -568,6 +591,132 @@ function renderTopicVocabulary(data) {
   outputEl.appendChild(root);
 }
 
+function appendNewsHighlightedText(element, text) {
+  parseNewsHighlights(text).forEach((token) => {
+    if (token.type === "text") {
+      element.appendChild(document.createTextNode(token.text));
+      return;
+    }
+    const mark = document.createElement("mark");
+    mark.className = token.type === "phrase" ? "news-phrase-highlight" : "news-grammar-highlight";
+    mark.textContent = token.text;
+    element.appendChild(mark);
+  });
+}
+
+function formatNewsDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || "日期未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function newsLearningBlock(title, items, renderItem) {
+  const block = document.createElement("section");
+  block.className = "news-learning-block";
+  const heading = document.createElement("h5");
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  list.className = "news-learning-list";
+  items.forEach((item) => {
+    const row = document.createElement("li");
+    renderItem(row, item);
+    list.appendChild(row);
+  });
+  block.append(heading, list);
+  return block;
+}
+
+function renderNewsResult(data) {
+  outputEl.innerHTML = "";
+  const root = document.createElement("div");
+  root.className = "news-result";
+  const heading = document.createElement("div");
+  heading.className = "news-result-heading";
+  const title = document.createElement("h3");
+  title.textContent = data.query;
+  const searchedAt = document.createElement("span");
+  searchedAt.className = "news-searched-at";
+  searchedAt.textContent = `搜索于 ${formatNewsDate(data.searchedAt)}`;
+  heading.append(title, searchedAt);
+
+  const legend = document.createElement("div");
+  legend.className = "news-legend";
+  const phraseLegend = document.createElement("span");
+  const phraseMark = document.createElement("mark");
+  phraseMark.className = "news-phrase-highlight";
+  phraseMark.textContent = "词组搭配";
+  phraseLegend.append(phraseMark, "重点表达");
+  const grammarLegend = document.createElement("span");
+  const grammarMark = document.createElement("mark");
+  grammarMark.className = "news-grammar-highlight";
+  grammarMark.textContent = "语法结构";
+  grammarLegend.append(grammarMark, "语法实例");
+  legend.append(phraseLegend, grammarLegend);
+  root.append(heading, legend);
+
+  (data.articles || []).forEach((item) => {
+    const article = document.createElement("article");
+    article.className = "news-article";
+    const articleTitle = document.createElement("h4");
+    articleTitle.textContent = item.title;
+    const source = document.createElement("div");
+    source.className = "news-source";
+    const link = document.createElement("a");
+    link.href = item.sourceUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = item.sourceName || "查看原文";
+    source.append(link, document.createTextNode(` · ${formatNewsDate(item.publishedAt)}`));
+    article.append(articleTitle, source);
+
+    if (item.summaryZh) {
+      const summary = document.createElement("p");
+      summary.className = "news-summary";
+      summary.textContent = item.summaryZh;
+      article.appendChild(summary);
+    }
+    (item.paragraphs || []).forEach((paragraph) => {
+      const text = document.createElement("p");
+      text.className = "news-paragraph";
+      appendNewsHighlightedText(text, paragraph);
+      article.appendChild(text);
+    });
+
+    const learning = document.createElement("div");
+    learning.className = "news-learning";
+    if (item.keyPhrases?.length) {
+      learning.appendChild(newsLearningBlock("重点词组与搭配", item.keyPhrases, (row, phrase) => {
+        const name = document.createElement("strong");
+        name.textContent = `${phrase.phrase} · ${phrase.meaningZh}`;
+        const note = document.createElement("div");
+        note.className = "news-learning-note";
+        note.textContent = phrase.noteZh;
+        row.append(name, note);
+      }));
+    }
+    if (item.grammarPoints?.length) {
+      learning.appendChild(newsLearningBlock("语法知识", item.grammarPoints, (row, point) => {
+        const name = document.createElement("strong");
+        name.textContent = point.pattern;
+        const note = document.createElement("div");
+        note.className = "news-learning-note";
+        note.textContent = point.example
+          ? `${point.explanationZh} 例：${point.example}`
+          : point.explanationZh;
+        row.append(name, note);
+      }));
+    }
+    if (learning.childElementCount) article.appendChild(learning);
+    root.appendChild(article);
+  });
+
+  outputEl.appendChild(root);
+}
+
 // ── 提交流程 ───────────────────────────────────
 async function handleSubmit() {
   const text = inputEl.value.trim();
@@ -687,8 +836,42 @@ async function handleVocabularySubmit() {
   }
 }
 
+async function handleNewsSubmit() {
+  const query = inputEl.value.replace(/\s+/g, " ").trim();
+  if (!query) {
+    setStatus("请输入要搜索的新闻内容");
+    return;
+  }
+
+  outputEl.innerHTML = "";
+  resetFollowUp();
+  resetVocabCurrent();
+  resetPractice();
+  submitBtn.disabled = true;
+  setToolTabsDisabled(true);
+  copyBtn.hidden = true;
+  setStatus("");
+  setStage(`> news query: "${truncate(query, 70)}"`);
+  setStage(`> model: ${modelEl.value}  |  web search: ON`);
+  setStatus("正在搜索最新英文新闻…");
+
+  try {
+    const data = await fetchLatestNews({ query, model: modelEl.value });
+    renderNewsResult(data);
+    setStatus(`找到 ${data.articles?.length || 0} 条近期报道`);
+  } catch (error) {
+    setStage(`> ERROR: ${error.message}`);
+    setStatus(`搜索失败：${error.message}`);
+  } finally {
+    submitBtn.disabled = false;
+    setToolTabsDisabled(false);
+  }
+}
+
 function handlePrimarySubmit() {
-  return currentTool === "vocabulary" ? handleVocabularySubmit() : handleSubmit();
+  if (currentTool === "vocabulary") return handleVocabularySubmit();
+  if (currentTool === "news") return handleNewsSubmit();
+  return handleSubmit();
 }
 
 async function handleFollowUp() {
@@ -763,6 +946,7 @@ function updateUrl(data, text) {
 submitBtn.addEventListener("click", handlePrimarySubmit);
 translateToolTabEl.addEventListener("click", () => setToolMode("translate"));
 vocabularyToolTabEl.addEventListener("click", () => setToolMode("vocabulary"));
+newsToolTabEl.addEventListener("click", () => setToolMode("news"));
 followUpBtn.addEventListener("click", handleFollowUp);
 
 generatePracticeBtn.addEventListener("click", async () => {

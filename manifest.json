@@ -1,7 +1,7 @@
 {
   "name": "DeepTranslate 英语翻译",
   "short_name": "DeepTranslate",
-  "description": "英语翻译、语法分析与主题词汇学习工具",
+  "description": "英语翻译、语法分析、主题词汇与英文新闻学习工具",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

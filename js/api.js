@@ -202,6 +202,28 @@ export async function fetchVocabularyHelper({ topic, difficulty, model }) {
   return data;
 }
 
+export async function fetchLatestNews({ query, model }) {
+  const res = await fetch("/api/news-reader", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, model }),
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // 错误响应可能不是 JSON。
+  }
+
+  if (!res.ok) {
+    const detail = data?.message || data?.detail || data?.error || `新闻搜索失败 ${res.status}`;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
 export async function fetchPractice({ context, kind, model, history = [], difficulty = 1 }) {
   const res = await fetch("/api/practice", {
     method: "POST",

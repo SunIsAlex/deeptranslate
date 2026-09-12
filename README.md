@@ -12,6 +12,7 @@
   - 句子：地道翻译、句法成分着色高亮、语法点提示
 - **中译英**：短语给 2-4 个备选表达及语域区别，句子给单一最地道译法
 - **主题词汇助手**：输入中英文主题，按基础 A1-A2、中级 B1-B2、进阶 B2-C1 或专家 C1-C2 难度生成约 20 个词汇，并按 4 个主题相关类别展示双语释义和例句
+- **最新英文新闻**：按用户选择的中英文主题联网搜索近期报道，返回带原文来源的英文学习摘要，并高亮重点词组搭配和语法实例
 - **例句高亮**：目标词在例句中以 `[[ ]]` 标记，前端渲染为高亮，自动处理词形变化（paid off / making）
 - **渐进输出**：英译中优先显示完整句子译文，并按完整例句逐条追加，避免逐 token 输出造成抖动
 - **可选分析与模型**：可关闭英文句子的语法分析，并在 DeepSeek V4 Flash / Pro 之间切换
@@ -42,6 +43,7 @@
 ├── js/
 │   ├── dom.js                 # DOM 元素引用与通用构建工具
 │   ├── highlight.js           # 例句 [[ ]] 高亮、句法成分着色
+│   ├── news.js                # 新闻正文重点词组与语法标记解析
 │   ├── render.js              # 各类型结果渲染（word/phrase/sentence/zh）
 │   ├── speech.js              # 浏览器原生英美音朗读
 │   ├── vocabulary.js          # 本地生词本读写与去重
@@ -54,6 +56,7 @@
         ├── translate.js       # 英译中接口
         ├── related-words.js   # 结构化联想词接口
         ├── vocabulary-helper.js # 主题分类词汇接口
+        ├── news-reader.js     # 联网搜索与英文新闻学习摘要接口
         ├── practice.js        # 结构化练习题接口
         ├── translate-cache.js # Node Function 与 Edge KV 之间的缓存桥接
         └── translate-zh.js    # 中译英接口
@@ -83,6 +86,7 @@ edgeone pages dev         # 本地起调试服务
 | `DEEPSEEK_API_KEY` | DeepSeek 密钥 | 必填 |
 | `DEEPSEEK_MODEL` | 未指定前端模型时的默认模型 | deepseek-v4-flash |
 | `DEEPSEEK_API_URL` | API 地址 | https://api.deepseek.com/chat/completions |
+| `DEEPSEEK_RESPONSES_API_URL` | Responses API 地址（新闻联网搜索使用） | https://api.deepseek.com/responses |
 
 注意：EdgeOne 把环境变量注入为**全局变量**，不在 `context.env` 上；KV 命名空间同理，绑定时变量名填 `KV`。
 
@@ -176,6 +180,14 @@ edgeone pages dev         # 本地起调试服务
 
 接受不超过 80 个字符的中文或英文主题。`difficulty` 可选 `beginner`（A1-A2）、`intermediate`（B1-B2）、`advanced`（B2-C1，默认）或 `expert`（C1-C2）。返回所用难度、`topicTranslation` 和 `categories`；默认包含 4 个与主题相关的动态类别，每类约 5 个词汇或短语。每个词条包含 `term`、`partOfSpeech`、`translation`、`example` 和 `exampleTranslation`。
 
+### POST /api/news-reader（最新英文新闻）
+
+```json
+{ "query": "artificial intelligence", "model": "deepseek-v4-flash" }
+```
+
+接受不超过 120 个字符的中文或英文搜索主题。接口通过 DeepSeek Responses API 的服务端 `web_search` 搜索近期英文报道，返回最多 3 条带来源链接和发布日期的原创学习摘要。每条报道包含英文段落、中文概要、重点词组搭配和语法知识；正文中的 `[[词组]]` 与 `{{语法实例}}` 会由前端安全渲染为不同颜色的高亮。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -191,6 +203,7 @@ edgeone pages dev         # 本地起调试服务
 | `/api/related-words` | 生词本联想词接口 |
 | `/api/practice` | 结构化练习题接口 |
 | `/api/vocabulary-helper` | 主题分类词汇接口 |
+| `/api/news-reader` | 最新英文新闻搜索与学习摘要接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。

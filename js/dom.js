@@ -3,6 +3,7 @@
 export const inputEl = document.getElementById("input-text");
 export const translateToolTabEl = document.getElementById("translate-tool-tab");
 export const vocabularyToolTabEl = document.getElementById("vocabulary-tool-tab");
+export const newsToolTabEl = document.getElementById("news-tool-tab");
 export const translationModeOptionEl = document.getElementById("translation-mode-option");
 export const grammarAnalysisOptionEl = document.getElementById("grammar-analysis-option");
 export const targetLanguageEl = document.getElementById("target-language");
