@@ -63,6 +63,7 @@
 └── node-functions/
     └── api/
         ├── translate-stream.js # 英译中 SSE 流式接口
+        ├── news-stream.js      # 英文新闻搜索与行式协议 SSE 接口
         └── follow-up.js        # 基于翻译上下文的流式追问接口
 ```
 
@@ -188,6 +189,10 @@ edgeone pages dev         # 本地起调试服务
 
 接受不超过 120 个字符的中文或英文搜索主题。接口通过 DeepSeek Responses API 的服务端 `web_search` 搜索近期英文报道，返回最多 3 条带来源链接和发布日期的原创学习摘要。每条报道包含英文段落、中文概要、重点词组搭配和语法知识；正文中的 `[[词组]]` 与 `{{语法实例}}` 会由前端安全渲染为不同颜色的高亮。
 
+### POST /api/news-stream（最新英文新闻流式接口）
+
+请求体与 `/api/news-reader` 相同，响应类型为 `text/event-stream`。模型不输出 JSON，而是使用 `@@ARTICLE`、`@@PARAGRAPH`、`@@PHRASE`、`@@GRAMMAR` 等行式控制符；服务端增量解析后依次发送 `meta`、`stage`、多个 `article` 快照、`result` 和 `done` 事件。模型输出中途截断时，已经具备标题、合法来源和正文的文章仍会保留，并在最终结果中设置 `_partial: true`。前端优先使用此接口，流式端点不可用时自动回退到 `/api/news-reader`。
+
 ## 路由
 
 | 路径 | 行为 |
@@ -204,6 +209,7 @@ edgeone pages dev         # 本地起调试服务
 | `/api/practice` | 结构化练习题接口 |
 | `/api/vocabulary-helper` | 主题分类词汇接口 |
 | `/api/news-reader` | 最新英文新闻搜索与学习摘要接口 |
+| `/api/news-stream` | 最新英文新闻流式搜索接口 |
 | `/api/translate-zh` | 中译英接口 |
 
 所有页面路由需在 `edgeone.json` 里 rewrite 到 `index.html`——EdgeOne 默认不会把不存在的路径回退到首页，缺少 rewrite 会导致直接访问 / 刷新分享链接时 404。

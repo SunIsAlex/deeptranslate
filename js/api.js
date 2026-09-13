@@ -202,7 +202,51 @@ export async function fetchVocabularyHelper({ topic, difficulty, model }) {
   return data;
 }
 
-export async function fetchLatestNews({ query, model }) {
+export async function fetchLatestNews({ query, model, onEvent }) {
+  if (typeof ReadableStream !== "undefined") {
+    try {
+      return await fetchLatestNewsStream({ query, model, onEvent });
+    } catch (error) {
+      onEvent?.("fallback", { detail: error.message });
+    }
+  }
+  return fetchLatestNewsJson({ query, model });
+}
+
+async function fetchLatestNewsStream({ query, model, onEvent }) {
+  const res = await fetch("/api/news-stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "text/event-stream",
+    },
+    body: JSON.stringify({ query, model }),
+  });
+  const contentType = res.headers.get("Content-Type") || "";
+  if (!res.ok || !contentType.includes("text/event-stream") || !res.body) {
+    let detail = `流式新闻接口返回 ${res.status}`;
+    try {
+      const data = await res.json();
+      detail = data.message || data.detail || data.error || detail;
+    } catch {
+      // 非 JSON 错误响应。
+    }
+    throw new Error(detail);
+  }
+
+  let result = null;
+  let streamError = null;
+  await readEventStream(res, (event, data) => {
+    if (event === "result") result = data;
+    else if (event === "error") streamError = new Error(data.detail || data.error || "stream_failed");
+    onEvent?.(event, data);
+  });
+  if (streamError) throw streamError;
+  if (!result) throw new Error("新闻流未返回完整结果");
+  return result;
+}
+
+async function fetchLatestNewsJson({ query, model }) {
   const res = await fetch("/api/news-reader", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

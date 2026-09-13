@@ -665,12 +665,19 @@ function renderNewsResult(data) {
     articleTitle.textContent = item.title;
     const source = document.createElement("div");
     source.className = "news-source";
-    const link = document.createElement("a");
-    link.href = item.sourceUrl;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = item.sourceName || "查看原文";
-    source.append(link, document.createTextNode(` · ${formatNewsDate(item.publishedAt)}`));
+    if (item.sourceUrl) {
+      const link = document.createElement("a");
+      link.href = item.sourceUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = item.sourceName || "查看原文";
+      source.appendChild(link);
+    } else if (item.sourceName) {
+      source.appendChild(document.createTextNode(item.sourceName));
+    }
+    if (item.publishedAt) {
+      source.appendChild(document.createTextNode(`${source.childNodes.length ? " · " : ""}${formatNewsDate(item.publishedAt)}`));
+    }
     article.append(articleTitle, source);
 
     if (item.summaryZh) {
@@ -856,9 +863,29 @@ async function handleNewsSubmit() {
   setStatus("正在搜索最新英文新闻…");
 
   try {
-    const data = await fetchLatestNews({ query, model: modelEl.value });
+    const partial = { query, searchedAt: new Date().toISOString(), articles: [] };
+    const data = await fetchLatestNews({
+      query,
+      model: modelEl.value,
+      onEvent(event, payload) {
+        if (event === "meta") {
+          partial.query = payload.query || query;
+          partial.searchedAt = payload.searchedAt || partial.searchedAt;
+        } else if (event === "stage") {
+          setStatus(payload.text || "正在整理新闻…");
+        } else if (event === "article" && Number.isInteger(payload.index) && payload.article) {
+          partial.articles[payload.index] = payload.article;
+          renderNewsResult(partial);
+          setStatus(`正在整理第 ${payload.index + 1} 条报道…`);
+        } else if (event === "fallback") {
+          setStatus("流式输出不可用，正在切换兼容模式…");
+        }
+      },
+    });
     renderNewsResult(data);
-    setStatus(`找到 ${data.articles?.length || 0} 条近期报道`);
+    setStatus(data._partial
+      ? `已展示 ${data.articles?.length || 0} 条报道（模型输出提前结束）`
+      : `找到 ${data.articles?.length || 0} 条近期报道`);
   } catch (error) {
     setStage(`> ERROR: ${error.message}`);
     setStatus(`搜索失败：${error.message}`);
